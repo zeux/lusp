@@ -156,7 +156,7 @@ static inline int read_integer_value(struct reader_t* reader, int base, const ch
 	
 	do
 	{
-		int digit = is_digit(ch) ? ch - '0' : tolower(ch) - 'a';
+		int digit = is_digit(ch) ? ch - '0' : tolower(ch) - 'a' + 10;
 		
 		check(reader, digit >= 0 && digit < base, message);
 		
