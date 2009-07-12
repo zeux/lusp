@@ -4,12 +4,14 @@
 
 #include <lusp/object.h>
 
-#include <stdlib.h>
-#include <string.h>
+#include <core/string.h>
+#include <mem/arena.h>
+
+extern struct mem_arena_t g_lusp_heap;
 
 static inline struct lusp_object_t* mkobject(enum lusp_object_type_t type)
 {
-	struct lusp_object_t* result = (struct lusp_object_t*)malloc(sizeof(struct lusp_object_t));
+	struct lusp_object_t* result = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_object_t);
 	DL_ASSERT(result);
 	
 	result->type = type;
@@ -18,7 +20,14 @@ static inline struct lusp_object_t* mkobject(enum lusp_object_type_t type)
 
 static inline const char* mkstring(const char* value)
 {
-	return strdup(value);
+	size_t length = str_length(value);
+	
+	char* result = MEM_ARENA_NEW_ARRAY(&g_lusp_heap, char, length + 1);
+	DL_ASSERT(result);
+	
+	str_copy(result, length + 1, value);
+	
+	return result;
 }
 
 struct lusp_object_t* lusp_mksymbol(const char* name)
