@@ -13,24 +13,6 @@
 
 #include <stdio.h>
 
-static struct lusp_object_t* reverse(struct lusp_object_t* list)
-{
-	struct lusp_object_t* prev = 0;
-
-	while (list)
-	{
-		DL_ASSERT(list->type == LUSP_OBJECT_CONS);
-
-		struct lusp_object_t* cdr = list->cons.cdr;
-		list->cons.cdr = prev;
-
-		prev = list;
-		list = cdr;
-	}
-
-	return prev;
-}
-
 struct reader_t
 {
 	const char* data;
@@ -323,20 +305,22 @@ static struct lusp_object_t* read_list(struct reader_t* reader)
 	DL_ASSERT(peekchar(reader) == '(');
 	nextchar(reader);
 	
-	struct lusp_object_t* result = 0;
+	struct lusp_object_t* head = 0;
+	struct lusp_object_t* tail = 0;
 	
 	// read a list of atoms
 	while ((skipws(reader), peekchar(reader)) != ')')
 	{
 		struct lusp_object_t* atom = read_atom(reader);
 		
-		result = lusp_mkcons(atom, result);
+		if (tail) tail = tail->cons.cdr = lusp_mkcons(atom, 0);
+		else head = tail = lusp_mkcons(atom, 0);
 	}
 	
 	DL_ASSERT(peekchar(reader) == ')');
 	nextchar(reader);
 
-	return reverse(result);
+	return head;
 }
 
 static struct lusp_object_t* read_quote(struct reader_t* reader)
@@ -404,12 +388,11 @@ static struct lusp_object_t* read_program(struct reader_t* reader)
 	struct lusp_object_t* program = read_atom(reader);
 	
 	skipws(reader);
-	check(reader, peekchar(reader) == 0, "unexpected data");
 	
 	return program;
 }
 
-struct lusp_object_t* lusp_read(const char* data)
+bool lusp_read_ex(const char* data, const char** out_data, struct lusp_object_t** out_result)
 {
 	jmp_buf buf;
 	volatile struct reader_t reader = {data, &buf, ""};
@@ -417,8 +400,28 @@ struct lusp_object_t* lusp_read(const char* data)
 	if (setjmp(buf))
 	{
 		printf("error: read failed (%s)\n", reader.message);
+		return false;
+	}
+	
+	struct lusp_object_t* result = read_program((struct reader_t*)&reader);
+	
+	*out_data = reader.data;
+	*out_result = result;
+	
+	return true;
+}
+
+struct lusp_object_t* lusp_read(const char* data)
+{
+	struct lusp_object_t* result;
+	
+	if (!lusp_read_ex(data, &data, &result)) return 0;
+	
+	if (*data)
+	{
+		printf("error: read failed (unexpected data)\n");
 		return 0;
 	}
 	
-	return read_program((struct reader_t*)&reader);
+	return result;
 }

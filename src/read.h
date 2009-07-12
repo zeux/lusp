@@ -5,3 +5,4 @@
 struct lusp_object_t;
 
 struct lusp_object_t* lusp_read(const char* data);
+bool lusp_read_ex(const char* data, const char** out_data, struct lusp_object_t** out_result);
