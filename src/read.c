@@ -9,6 +9,8 @@
 #include <core/string.h>
 
 #include <setjmp.h>
+#include <math.h>
+
 #include <stdio.h>
 
 static struct lusp_object_t* reverse(struct lusp_object_t* list)
@@ -32,7 +34,9 @@ static struct lusp_object_t* reverse(struct lusp_object_t* list)
 struct reader_t
 {
 	const char* data;
+	
 	jmp_buf* error;
+	const char* message;
 };
 
 static inline bool is_whitespace(char data)
@@ -45,19 +49,19 @@ static inline bool is_delimiter(char data)
 	return is_whitespace(data) || data == '(' || data == ')' || data == '"' || data == ';';
 }
 
-static inline bool is_range(char data, char min, char max)
+static inline char tolower(char data)
 {
-	return (unsigned char)(data - min) <= (unsigned char)(max - min);
+	return (unsigned char)(data - 'A') < 26 ? data - 'A' : data;
 }
 
 static inline bool is_digit(char data)
 {
-	return is_range(data, '0', '9');
+	return (unsigned char)(data - '0') < 10;
 }
 
-static inline char getchar(struct reader_t* reader)
+static inline char nextchar(struct reader_t* reader)
 {
-	return *reader->data++;
+	return *++reader->data;
 }
 
 static inline char peekchar(struct reader_t* reader)
@@ -65,22 +69,27 @@ static inline char peekchar(struct reader_t* reader)
 	return *reader->data;
 }
 
-static inline void check(struct reader_t* reader, bool condition)
+static inline void check(struct reader_t* reader, bool condition, const char* message)
 {
-	if (!condition) longjmp(*reader->error, 1);
+	if (!condition)
+	{
+		reader->message = message;
+		
+		longjmp(*reader->error, 1);
+	}
 }
 
 static inline void skipws(struct reader_t* reader)
 {
 	// skip whitespace
-	while (is_whitespace(peekchar(reader))) getchar(reader);
+	while (is_whitespace(peekchar(reader))) nextchar(reader);
 	
 	// skip comment
 	if (peekchar(reader) == ';')
 	{
 		char ch;
 		
-		while ((ch = peekchar(reader)) != 0 && ch != '\n') getchar(reader);
+		while ((ch = peekchar(reader)) != 0 && ch != '\n') nextchar(reader);
 		
 		// skip trailing ws
 		skipws(reader);
@@ -95,28 +104,26 @@ static struct lusp_object_t* read_string(struct reader_t* reader)
 	char* buffer_end = buffer + sizeof(value) - 1;
 
 	// skip "
-	char ch = getchar(reader);
-	DL_ASSERT(ch == '"');
+	DL_ASSERT(peekchar(reader) == '"');
 
 	// scan for closing quote
-	while ((ch = getchar(reader)) != 0 && ch != '"')
+	char ch;
+	
+	while ((ch = nextchar(reader)) != 0 && ch != '"')
 	{
+		check(reader, buffer < buffer_end, "string is too long");
+		
 		if (ch == '\\')
 		{
-			char escaped = getchar(reader);
-			check(reader, buffer < buffer_end && escaped != 0);
-
-			*buffer++ = escaped;
+			ch = nextchar(reader);
+			check(reader, ch != 0, "premature end of string");
 		}
-		else
-		{
-			check(reader, buffer < buffer_end);
-
-			*buffer++ = ch;
-		}
+		
+		*buffer++ = ch;
 	}
 	
-	check(reader, ch == '"');
+	check(reader, ch == '"', "premature end of string");
+	nextchar(reader);
 
 	// this is safe since buffer is one byte larger than buffer_end tells us
 	*buffer = 0;
@@ -132,19 +139,16 @@ static struct lusp_object_t* read_symbol(struct reader_t* reader)
 	char* buffer_end = buffer + sizeof(value) - 1;
 	
 	// scan for delimiter
-	char ch;
+	char ch = peekchar(reader);
+	check(reader, ch != 0 && !is_delimiter(ch), "symbol expected");
 
-	while ((ch = peekchar(reader)) != 0 && !is_delimiter(ch))
+	do
 	{
-		check(reader, buffer < buffer_end);
+		check(reader, buffer < buffer_end, "symbol is too long");
 		
 		*buffer++ = ch;
-		
-		getchar(reader);
 	}
-	
-	// no empty symbols
-	check(reader, buffer > value);
+	while ((ch = nextchar(reader)) != 0 && !is_delimiter(ch));
 	
 	// this is safe since buffer is one byte larger than buffer_end tells us
 	*buffer = 0;
@@ -152,42 +156,64 @@ static struct lusp_object_t* read_symbol(struct reader_t* reader)
 	return lusp_mksymbol(value);
 }
 
-static struct lusp_object_t* read_integer_hex(struct reader_t* reader)
+static struct lusp_object_t* read_integer(struct reader_t* reader, int base, const char* message)
 {
 	int result = 0;
 	
-	char ch;
+	char ch = peekchar(reader);
 	
-	while ((ch = peekchar(reader)) != 0 && !is_delimiter(ch))
+	do
 	{
-		check(reader, is_digit(ch) || is_range(ch, 'a', 'f') || is_range(ch, 'A', 'F'));
+		int digit = is_digit(ch) ? ch - '0' : tolower(ch) - 'a';
 		
-		int digit = is_digit(ch) ? ch - '0' : is_range(ch, 'a', 'f') ? ch - 'a' : ch - 'A';
+		check(reader, digit >= 0 && digit < base, message);
 		
-		result = result * 16 + digit;
-		
-		getchar(reader);
+		result = result * base + digit;
 	}
+	while ((ch = nextchar(reader)) != 0 && !is_delimiter(ch));
 	
 	return lusp_mkinteger(result);
 }
 
-static struct lusp_object_t* read_integer_dec(struct reader_t* reader)
+static struct lusp_object_t* read_real(struct reader_t* reader, int integer)
+{
+	float fractional = 0;
+	float power = 0.1f;
+	
+	for (char ch = peekchar(reader); ch != 0 && !is_delimiter(ch); ch = nextchar(reader))
+	{
+		check(reader, is_digit(ch), "decimal digit expected");
+		
+		int digit = ch - '0';
+		
+		fractional = fractional + power * digit;
+		power /= 10;
+	}
+	
+	return lusp_mkreal(integer + fractional);
+}
+
+static struct lusp_object_t* read_number(struct reader_t* reader)
 {
 	int result = 0;
 	
-	char ch;
+	char ch = peekchar(reader);
 	
-	while ((ch = peekchar(reader)) != 0 && !is_delimiter(ch))
+	do
 	{
-		check(reader, is_digit(ch));
+		if (ch == '.')
+		{
+			nextchar(reader);
+			return read_real(reader, result);
+		}
+		
+		check(reader, is_digit(ch), "decimal digit expected");
 		
 		int digit = ch - '0';
 		
 		result = result * 10 + digit;
-		
-		getchar(reader);
 	}
+	while ((ch = nextchar(reader)) != 0 && !is_delimiter(ch));
 	
 	return lusp_mkinteger(result);
 }
@@ -196,33 +222,49 @@ static struct lusp_object_t* read_datum(struct reader_t* reader)
 {
 	char ch = peekchar(reader);
 	
-	if (ch == '.' || is_digit(ch))
-		return read_integer_dec(reader); // TODO: real
-	else if (ch == '#')
+	if (ch == '#')
 	{
-		getchar(reader);
-		
-		switch (getchar(reader))
+		switch (tolower(nextchar(reader)))
 		{
 		case 't':
-		case 'T':
+			nextchar(reader);
 			return lusp_mkboolean(true);
 			
 		case 'f':
-		case 'F':
+			nextchar(reader);
 			return lusp_mkboolean(false);
 			
+		case 'd':
+			nextchar(reader);
+			return read_number(reader);
+			
+		case 'b':
+			nextchar(reader);
+			return read_integer(reader, 2, "binary digit expected");
+			
+		case 'o':
+			nextchar(reader);
+			return read_integer(reader, 8, "octal digit expected");
+			
 		case 'x':
-		case 'X':
-			return read_integer_hex(reader);
+			nextchar(reader);
+			return read_integer(reader, 16, "hexadecimal digit expected");
 			
 		default:
-			check(reader, false);
+			check(reader, false, "wrong literal type");
 			return 0;
 		}
 	}
+	else if (ch == '.')
+	{
+		ch = nextchar(reader);
+		
+		return (is_delimiter(ch) || ch == 0) ? lusp_mksymbol(".") : read_real(reader, 0);
+	}
 	else if (ch == '"')
 		return read_string(reader);
+	else if (is_digit(ch))
+		return read_number(reader);
 	else
 		return read_symbol(reader);
 }
@@ -232,7 +274,7 @@ static struct lusp_object_t* read_atom(struct reader_t* reader);
 static struct lusp_object_t* read_list(struct reader_t* reader)
 {
 	DL_ASSERT(peekchar(reader) == '(');
-	getchar(reader);
+	nextchar(reader);
 	
 	struct lusp_object_t* result = 0;
 	
@@ -245,7 +287,7 @@ static struct lusp_object_t* read_list(struct reader_t* reader)
 	}
 	
 	DL_ASSERT(peekchar(reader) == ')');
-	getchar(reader);
+	nextchar(reader);
 
 	return reverse(result);
 }
@@ -253,7 +295,7 @@ static struct lusp_object_t* read_list(struct reader_t* reader)
 static struct lusp_object_t* read_quote(struct reader_t* reader)
 {
 	DL_ASSERT(peekchar(reader) == '\'');
-	getchar(reader);
+	nextchar(reader);
 	
 	skipws(reader);
 	
@@ -264,8 +306,6 @@ static struct lusp_object_t* read_quote(struct reader_t* reader)
 
 static struct lusp_object_t* read_atom(struct reader_t* reader)
 {
-	skipws(reader);
-	
 	switch (peekchar(reader))
 	{
 	case '(':
@@ -284,7 +324,7 @@ static struct lusp_object_t* read_program(struct reader_t* reader)
 	struct lusp_object_t* program = read_atom(reader);
 	
 	skipws(reader);
-	check(reader, peekchar(reader) == 0);
+	check(reader, peekchar(reader) == 0, "unexpected data");
 	
 	return program;
 }
@@ -292,14 +332,13 @@ static struct lusp_object_t* read_program(struct reader_t* reader)
 struct lusp_object_t* lusp_read(const char* data)
 {
 	jmp_buf buf;
+	volatile struct reader_t reader = {data, &buf, ""};
 	
 	if (setjmp(buf))
 	{
-		printf("error: read failed\n");
+		printf("error: read failed (%s)\n", reader.message);
 		return 0;
 	}
 	
-	struct reader_t reader = {data, &buf};
-	
-	return read_program(&reader);
+	return read_program((struct reader_t*)&reader);
 }
