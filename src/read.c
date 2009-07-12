@@ -156,9 +156,19 @@ static struct lusp_object_t* read_symbol(struct reader_t* reader)
 	return lusp_mksymbol(value);
 }
 
-static struct lusp_object_t* read_integer(struct reader_t* reader, int base, const char* message)
+static inline int read_sign(struct reader_t* reader)
+{
+	char ch = peekchar(reader);
+	
+	if (ch == '+' || ch == '-') nextchar(reader);
+	
+	return (ch == '-') ? -1 : 1;
+}
+
+static inline int read_integer_value(struct reader_t* reader, int base, const char* message)
 {
 	int result = 0;
+	int sign = read_sign(reader);
 	
 	char ch = peekchar(reader);
 	
@@ -172,16 +182,34 @@ static struct lusp_object_t* read_integer(struct reader_t* reader, int base, con
 	}
 	while ((ch = nextchar(reader)) != 0 && !is_delimiter(ch));
 	
-	return lusp_mkinteger(result);
+	return result * sign;
 }
 
-static struct lusp_object_t* read_real(struct reader_t* reader, int integer)
+static struct lusp_object_t* read_integer(struct reader_t* reader, int base, const char* message)
+{
+	return lusp_mkinteger(read_integer_value(reader, base, message));
+}
+
+static inline struct lusp_object_t* read_real_exp(struct reader_t* reader, float base, int sign)
+{
+	int power = read_integer_value(reader, 10, "decimal digit expected");
+	
+	return lusp_mkreal(sign * base * powf(10, (float)power));
+}
+
+static inline struct lusp_object_t* read_real(struct reader_t* reader, int integer, int sign)
 {
 	float fractional = 0;
 	float power = 0.1f;
 	
 	for (char ch = peekchar(reader); ch != 0 && !is_delimiter(ch); ch = nextchar(reader))
 	{
+		if (tolower(ch) == 'e')
+		{
+			nextchar(reader);
+			return read_real_exp(reader, integer + fractional, sign);
+		}
+		
 		check(reader, is_digit(ch), "decimal digit expected");
 		
 		int digit = ch - '0';
@@ -190,12 +218,13 @@ static struct lusp_object_t* read_real(struct reader_t* reader, int integer)
 		power /= 10;
 	}
 	
-	return lusp_mkreal(integer + fractional);
+	return lusp_mkreal((integer + fractional) * sign);
 }
 
-static struct lusp_object_t* read_number(struct reader_t* reader)
+static struct lusp_object_t* read_number(struct reader_t* reader, bool negative)
 {
 	int result = 0;
+	int sign = negative ? -1 : read_sign(reader);
 	
 	char ch = peekchar(reader);
 	
@@ -204,7 +233,13 @@ static struct lusp_object_t* read_number(struct reader_t* reader)
 		if (ch == '.')
 		{
 			nextchar(reader);
-			return read_real(reader, result);
+			return read_real(reader, result, sign);
+		}
+		
+		if (tolower(ch) == 'e')
+		{
+			nextchar(reader);
+			return read_real_exp(reader, (float)result, sign);
 		}
 		
 		check(reader, is_digit(ch), "decimal digit expected");
@@ -215,7 +250,7 @@ static struct lusp_object_t* read_number(struct reader_t* reader)
 	}
 	while ((ch = nextchar(reader)) != 0 && !is_delimiter(ch));
 	
-	return lusp_mkinteger(result);
+	return lusp_mkinteger(sign * result);
 }
 
 static struct lusp_object_t* read_datum(struct reader_t* reader)
@@ -236,7 +271,7 @@ static struct lusp_object_t* read_datum(struct reader_t* reader)
 			
 		case 'd':
 			nextchar(reader);
-			return read_number(reader);
+			return read_number(reader, false);
 			
 		case 'b':
 			nextchar(reader);
@@ -255,16 +290,28 @@ static struct lusp_object_t* read_datum(struct reader_t* reader)
 			return 0;
 		}
 	}
+	else if (ch == '+')
+	{
+		ch = nextchar(reader);
+		
+		return (is_delimiter(ch) || ch == 0) ? lusp_mksymbol("+") : read_number(reader, false);
+	}
+	else if (ch == '-')
+	{
+		ch = nextchar(reader);
+		
+		return (is_delimiter(ch) || ch == 0) ? lusp_mksymbol("-") : read_number(reader, true);
+	}
 	else if (ch == '.')
 	{
 		ch = nextchar(reader);
 		
-		return (is_delimiter(ch) || ch == 0) ? lusp_mksymbol(".") : read_real(reader, 0);
+		return (is_delimiter(ch) || ch == 0) ? lusp_mksymbol(".") : read_real(reader, 0, 1);
 	}
 	else if (ch == '"')
 		return read_string(reader);
 	else if (is_digit(ch))
-		return read_number(reader);
+		return read_number(reader, false);
 	else
 		return read_symbol(reader);
 }
@@ -304,6 +351,33 @@ static struct lusp_object_t* read_quote(struct reader_t* reader)
 	return lusp_mkcons(lusp_mksymbol("quote"), atom);
 }
 
+static struct lusp_object_t* read_quasiquote(struct reader_t* reader)
+{
+	DL_ASSERT(peekchar(reader) == '`');
+	nextchar(reader);
+	
+	skipws(reader);
+	
+	struct lusp_object_t* atom = read_atom(reader);
+	
+	return lusp_mkcons(lusp_mksymbol("quasiquote"), atom);
+}
+
+static struct lusp_object_t* read_unquote(struct reader_t* reader)
+{
+	DL_ASSERT(peekchar(reader) == ',');
+	char ch = nextchar(reader);
+	
+	// handle unquote-splicing
+	if (ch == '@') nextchar(reader);
+	
+	skipws(reader);
+	
+	struct lusp_object_t* atom = read_atom(reader);
+	
+	return lusp_mkcons(lusp_mksymbol(ch == '@' ? "unquote-splicing" : "unquote"), atom);
+}
+
 static struct lusp_object_t* read_atom(struct reader_t* reader)
 {
 	switch (peekchar(reader))
@@ -313,6 +387,12 @@ static struct lusp_object_t* read_atom(struct reader_t* reader)
 		
 	case '\'':
 		return read_quote(reader);
+		
+	case '`':
+		return read_quasiquote(reader);
+		
+	case ',':
+		return read_unquote(reader);
 		
 	default:
 		return read_datum(reader);
