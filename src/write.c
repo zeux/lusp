@@ -12,7 +12,7 @@ void lusp_write(struct lusp_object_t* object)
 {
 	if (!object)
 	{
-		printf("#<null>");
+		printf("()");
 		return;
 	}
 	
