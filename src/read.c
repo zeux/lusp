@@ -95,6 +95,7 @@ static struct lusp_object_t* read_string(struct reader_t* reader)
 	{
 		check(reader, buffer < buffer_end, "string is too long");
 		
+		// unescape
 		if (ch == '\\')
 		{
 			ch = nextchar(reader);
@@ -156,6 +157,7 @@ static inline int read_integer_value(struct reader_t* reader, int base, const ch
 	
 	do
 	{
+		// handle both decimal and hexadecimal digits
 		int digit = is_digit(ch) ? ch - '0' : tolower(ch) - 'a' + 10;
 		
 		check(reader, digit >= 0 && digit < base, message);
@@ -186,6 +188,7 @@ static inline struct lusp_object_t* read_real(struct reader_t* reader, int integ
 	
 	for (char ch = peekchar(reader); ch != 0 && !is_delimiter(ch); ch = nextchar(reader))
 	{
+		// read exponent part
 		if (tolower(ch) == 'e')
 		{
 			nextchar(reader);
@@ -206,18 +209,22 @@ static inline struct lusp_object_t* read_real(struct reader_t* reader, int integ
 static struct lusp_object_t* read_number(struct reader_t* reader, bool negative)
 {
 	int result = 0;
+	
+	// get sign, unless we have a forced negative
 	int sign = negative ? -1 : read_sign(reader);
 	
 	char ch = peekchar(reader);
 	
 	do
 	{
+		// read fractional part
 		if (ch == '.')
 		{
 			nextchar(reader);
 			return read_real(reader, result, sign);
 		}
 		
+		// read exponent part
 		if (tolower(ch) == 'e')
 		{
 			nextchar(reader);
@@ -286,9 +293,9 @@ static struct lusp_object_t* read_datum(struct reader_t* reader)
 	}
 	else if (ch == '.')
 	{
-		ch = nextchar(reader);
+		check(reader, is_digit(nextchar(reader)), "decimal digit expected");
 		
-		return (is_delimiter(ch) || ch == 0) ? lusp_mksymbol(".") : read_real(reader, 0, 1);
+		return read_real(reader, 0, 1);
 	}
 	else if (ch == '"')
 		return read_string(reader);
@@ -300,8 +307,25 @@ static struct lusp_object_t* read_datum(struct reader_t* reader)
 
 static struct lusp_object_t* read_atom(struct reader_t* reader);
 
+static void read_pair(struct reader_t* reader, struct lusp_object_t* tail)
+{
+	check(reader, tail != 0, "invalid dotted pair");
+	
+	// read last atom
+	skipws(reader);
+	struct lusp_object_t* atom = read_atom(reader);
+	
+	// append atom
+	tail->cons.cdr = atom;
+	
+	// check that the atom was actually last one
+	skipws(reader);
+	check(reader, peekchar(reader) == ')', "invalid dotted pair");
+}
+
 static struct lusp_object_t* read_list(struct reader_t* reader)
 {
+	// skip open brace
 	DL_ASSERT(peekchar(reader) == '(');
 	nextchar(reader);
 	
@@ -311,12 +335,29 @@ static struct lusp_object_t* read_list(struct reader_t* reader)
 	// read a list of atoms
 	while ((skipws(reader), peekchar(reader)) != ')')
 	{
-		struct lusp_object_t* atom = read_atom(reader);
+		// read atom
+		struct lusp_object_t* atom;
 		
+		if (peekchar(reader) == '.')
+		{
+			// read dotted pair
+			if (is_delimiter(nextchar(reader)))
+			{
+				read_pair(reader, tail);
+				break;
+			}
+			
+			// it's actually a real number
+			atom = read_real(reader, 0, 1);
+		}
+		else atom = read_atom(reader);
+		
+		// append atom
 		if (tail) tail = tail->cons.cdr = lusp_mkcons(atom, 0);
 		else head = tail = lusp_mkcons(atom, 0);
 	}
 	
+	// skip closing brace
 	DL_ASSERT(peekchar(reader) == ')');
 	nextchar(reader);
 
@@ -325,11 +366,12 @@ static struct lusp_object_t* read_list(struct reader_t* reader)
 
 static struct lusp_object_t* read_quote(struct reader_t* reader)
 {
+	// skip quote
 	DL_ASSERT(peekchar(reader) == '\'');
 	nextchar(reader);
 	
+	// read atom
 	skipws(reader);
-	
 	struct lusp_object_t* atom = read_atom(reader);
 	
 	return lusp_mkcons(lusp_mksymbol("quote"), atom);
@@ -337,11 +379,12 @@ static struct lusp_object_t* read_quote(struct reader_t* reader)
 
 static struct lusp_object_t* read_quasiquote(struct reader_t* reader)
 {
+	// skip backquote
 	DL_ASSERT(peekchar(reader) == '`');
 	nextchar(reader);
 	
+	// read atom
 	skipws(reader);
-	
 	struct lusp_object_t* atom = read_atom(reader);
 	
 	return lusp_mkcons(lusp_mksymbol("quasiquote"), atom);
@@ -349,14 +392,15 @@ static struct lusp_object_t* read_quasiquote(struct reader_t* reader)
 
 static struct lusp_object_t* read_unquote(struct reader_t* reader)
 {
+	// skip comma
 	DL_ASSERT(peekchar(reader) == ',');
 	char ch = nextchar(reader);
 	
 	// handle unquote-splicing
 	if (ch == '@') nextchar(reader);
 	
+	// read atom
 	skipws(reader);
-	
 	struct lusp_object_t* atom = read_atom(reader);
 	
 	return lusp_mkcons(lusp_mksymbol(ch == '@' ? "unquote-splicing" : "unquote"), atom);
@@ -385,8 +429,8 @@ static struct lusp_object_t* read_atom(struct reader_t* reader)
 
 static struct lusp_object_t* read_program(struct reader_t* reader)
 {
+	skipws(reader);
 	struct lusp_object_t* program = read_atom(reader);
-	
 	skipws(reader);
 	
 	return program;

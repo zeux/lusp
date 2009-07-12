@@ -6,7 +6,48 @@
 
 #include <lusp/object.h>
 
+#include <core/string.h>
+
 #include <stdio.h>
+
+static inline void lusp_write_string(struct lusp_object_t* object)
+{
+	putc('"', stdout);
+	
+	for (const char* value = object->string.value; *value; ++value)
+	{
+		if (*value == '\\' || *value == '"') putc('\\', stdout);
+		putc(*value, stdout);
+	}
+	
+	putc('"', stdout);
+}
+
+static inline void lusp_write_cons(struct lusp_object_t* object)
+{
+	printf("(");
+	
+	// first element
+	lusp_write(object->cons.car);
+	object = object->cons.cdr;
+	
+	// remaining list elements
+	while (object && object->type == LUSP_OBJECT_CONS)
+	{
+		printf(" ");
+		lusp_write(object->cons.car);
+		object = object->cons.cdr;
+	}
+	
+	// dotted pair
+	if (object)
+	{
+		printf(" . ");
+		lusp_write(object);
+	}
+	
+	printf(")");
+}
 
 void lusp_write(struct lusp_object_t* object)
 {
@@ -35,15 +76,11 @@ void lusp_write(struct lusp_object_t* object)
 		break;
 		
 	case LUSP_OBJECT_STRING:
-		printf("\"%s\"", object->string.value); // TODO: escape output
+		lusp_write_string(object);
 		break;
 		
 	case LUSP_OBJECT_CONS:
-		printf("(");
-		lusp_write(object->cons.car);
-		printf(" ");
-		lusp_write(object->cons.cdr);
-		printf(")");
+		lusp_write_cons(object);
 		break;
 		
 	case LUSP_OBJECT_CLOSURE:
