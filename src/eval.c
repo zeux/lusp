@@ -82,6 +82,28 @@ void set_env(struct lusp_object_t* env, struct lusp_object_t* symbol, struct lus
 	}
 }
 
+static struct lusp_object_t* eval_list(struct lusp_object_t* env, struct lusp_object_t* object)
+{
+	struct lusp_object_t* head = 0;
+	struct lusp_object_t* tail = 0;
+	
+	while (object)
+	{
+		DL_ASSERT(object->type == LUSP_OBJECT_CONS);
+		
+		// evaluate result
+		struct lusp_object_t* result = lusp_eval(env, object->cons.car);
+		
+		// append result
+		if (tail) tail = tail->cons.cdr = lusp_mkcons(result, 0);
+		else head = tail = lusp_mkcons(result, 0);
+		
+		object = object->cons.cdr;
+	}
+	
+	return head;
+}
+
 static struct lusp_object_t* eval_symbol(struct lusp_object_t* env, struct lusp_object_t* object)
 {
 	DL_ASSERT(object && object->type == LUSP_OBJECT_SYMBOL);
@@ -105,9 +127,9 @@ static struct lusp_object_t* eval_closure(struct lusp_object_t* env, struct lusp
 	// add arguments to env
 	struct lusp_object_t* argnames = object->closure.args;
 	
-	while (argnames && args)
+	while (argnames && argnames->type == LUSP_OBJECT_CONS)
 	{
-		DL_ASSERT(argnames->type == LUSP_OBJECT_CONS && args->type == LUSP_OBJECT_CONS);
+		DL_ASSERT(args && args->type == LUSP_OBJECT_CONS);
 		
 		put_env(callenv, argnames->cons.car, lusp_eval(env, args->cons.car));
 		
@@ -115,7 +137,9 @@ static struct lusp_object_t* eval_closure(struct lusp_object_t* env, struct lusp
 		args = args->cons.cdr;
 	}
 	
-	DL_ASSERT(!argnames && !args);
+	// add optional arguments, if any
+	if (argnames) put_env(callenv, argnames, eval_list(env, args));
+	else DL_ASSERT(!args);
 	
 	// evaluate body
 	struct lusp_object_t* body = object->closure.body;
