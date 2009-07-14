@@ -40,14 +40,13 @@ struct compiler_t
 	
 	// error facilities
 	jmp_buf* error;
-	const char* message;
 };
 
 static inline void check(struct compiler_t* compiler, bool condition, const char* message)
 {
 	if (!condition)
 	{
-		compiler->message = message;
+		printf("error: compile failed (%s)\n", message);
 
 		longjmp(*compiler->error, 1);
 	}
@@ -360,16 +359,11 @@ static struct lusp_object_t* compile_program(struct compiler_t* compiler, struct
 struct lusp_object_t* lusp_compile(struct lusp_object_t* object)
 {
 	jmp_buf buf;
-	volatile struct compiler_t compiler;
+	struct compiler_t compiler;
 	
 	compiler.error = &buf;
-	compiler.message = "";
 	
-	if (setjmp(buf))
-	{
-		printf("error: compile failed (%s)\n", compiler.message);
-		return 0;
-	}
+	if (setjmp(buf)) return 0;
 	
 	return compile_program((struct compiler_t*)&compiler, object);
 }

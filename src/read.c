@@ -18,8 +18,17 @@ struct reader_t
 	const char* data;
 	
 	jmp_buf* error;
-	const char* message;
 };
+
+static inline void check(struct reader_t* reader, bool condition, const char* message)
+{
+	if (!condition)
+	{
+		printf("error: read failed (%s)\n", message);
+		
+		longjmp(*reader->error, 1);
+	}
+}
 
 static inline bool is_whitespace(char data)
 {
@@ -49,16 +58,6 @@ static inline char nextchar(struct reader_t* reader)
 static inline char peekchar(struct reader_t* reader)
 {
 	return *reader->data;
-}
-
-static inline void check(struct reader_t* reader, bool condition, const char* message)
-{
-	if (!condition)
-	{
-		reader->message = message;
-		
-		longjmp(*reader->error, 1);
-	}
 }
 
 static inline void skipws(struct reader_t* reader)
@@ -439,13 +438,9 @@ static struct lusp_object_t* read_program(struct reader_t* reader)
 bool lusp_read_ex(const char* data, const char** out_data, struct lusp_object_t** out_result)
 {
 	jmp_buf buf;
-	volatile struct reader_t reader = {data, &buf, ""};
+	struct reader_t reader = {data, &buf};
 	
-	if (setjmp(buf))
-	{
-		printf("error: read failed (%s)\n", reader.message);
-		return false;
-	}
+	if (setjmp(buf)) return false;
 	
 	struct lusp_object_t* result = read_program((struct reader_t*)&reader);
 	
