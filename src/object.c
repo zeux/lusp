@@ -72,29 +72,3 @@ struct lusp_object_t* lusp_mkcons(struct lusp_object_t* car, struct lusp_object_
 	result->cons.cdr = cdr;
 	return result;
 }
-
-struct lusp_object_t* lusp_mkclosure(struct lusp_object_t* environment, struct lusp_object_t* args, struct lusp_object_t* body)
-{
-	struct lusp_object_t* result = mkobject(LUSP_OBJECT_CLOSURE);
-	result->closure.environment = environment;
-	result->closure.environment = environment;
-	result->closure.args = args;
-	result->closure.body = body;
-	return result;
-}
-
-struct lusp_object_t* lusp_mkprocedure(void* context, lusp_procedure_t body)
-{
-	struct lusp_object_t* result = mkobject(LUSP_OBJECT_PROCEDURE);
-	result->procedure.context = context;
-	result->procedure.body = body;
-	return result;
-}
-
-struct lusp_object_t* lusp_mkenvironment(struct lusp_object_t* parent, struct lusp_object_t* contents)
-{
-	struct lusp_object_t* result = mkobject(LUSP_OBJECT_ENVIRONMENT);
-	result->environment.parent = parent;
-	result->environment.contents = contents;
-	return result;
-}

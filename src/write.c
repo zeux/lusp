@@ -87,14 +87,6 @@ void lusp_write(struct lusp_object_t* object)
 		printf("#<closure:%p>", object);
 		break;
 		
-	case LUSP_OBJECT_PROCEDURE:
-		printf("#<procedure:%p>", object);
-		break;
-		
-	case LUSP_OBJECT_ENVIRONMENT:
-		printf("#<environment:%p>", object);
-		break;
-		
 	default:
 		printf("#<unknown>");
 	}

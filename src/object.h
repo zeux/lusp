@@ -2,6 +2,9 @@
 
 #pragma once
 
+struct lusp_vm_environment_t;
+struct lusp_vm_bytecode_t;
+
 enum lusp_object_type_t
 {
 	LUSP_OBJECT_SYMBOL,
@@ -10,14 +13,8 @@ enum lusp_object_type_t
 	LUSP_OBJECT_REAL,
 	LUSP_OBJECT_STRING,
 	LUSP_OBJECT_CONS,
-	LUSP_OBJECT_CLOSURE,
-	LUSP_OBJECT_PROCEDURE,
-	LUSP_OBJECT_ENVIRONMENT
+	LUSP_OBJECT_CLOSURE
 };
-
-struct lusp_object_t;
-
-typedef struct lusp_object_t* (*lusp_procedure_t)(void* context, struct lusp_object_t* env, struct lusp_object_t* args);
 
 struct lusp_object_t
 {
@@ -58,22 +55,9 @@ struct lusp_object_t
 		
 		struct
 		{
-			struct lusp_object_t* environment;
-			struct lusp_object_t* args;
-			struct lusp_object_t* body;
+			struct lusp_vm_environment_t* env;
+			struct lusp_vm_bytecode_t* code;
 		} closure;
-		
-		struct
-		{
-			void* context;
-			lusp_procedure_t body;
-		} procedure;
-		
-		struct
-		{
-			struct lusp_object_t* parent;
-			struct lusp_object_t* contents;
-		} environment;
 	};
 };
 
@@ -83,6 +67,3 @@ struct lusp_object_t* lusp_mkinteger(int value);
 struct lusp_object_t* lusp_mkreal(float value);
 struct lusp_object_t* lusp_mkstring(const char* value);
 struct lusp_object_t* lusp_mkcons(struct lusp_object_t* car, struct lusp_object_t* cdr);
-struct lusp_object_t* lusp_mkclosure(struct lusp_object_t* env, struct lusp_object_t* args, struct lusp_object_t* body);
-struct lusp_object_t* lusp_mkprocedure(void* context, lusp_procedure_t body);
-struct lusp_object_t* lusp_mkenvironment(struct lusp_object_t* parent, struct lusp_object_t* contents);
