@@ -95,8 +95,8 @@ static void compile_object(struct compiler_t* compiler, struct lusp_object_t* ob
 {
 	struct lusp_vm_op_t op;
 	
-	op.opcode = LUSP_VMOP_LOAD_OBJECT;
-	op.load_object.object = object;
+	op.opcode = LUSP_VMOP_GET_OBJECT;
+	op.get_object.object = object;
 	emit(compiler, op);
 }
 
@@ -118,17 +118,17 @@ static void compile_symbol(struct compiler_t* compiler, struct lusp_object_t* ob
 	{
 		struct lusp_vm_op_t op;
 	
-		op.opcode = LUSP_VMOP_LOAD_LOCAL;
-		op.load_local.depth = local_depth;
-		op.load_local.index = local_index;
+		op.opcode = LUSP_VMOP_GET_LOCAL;
+		op.getset_local.depth = local_depth;
+		op.getset_local.index = local_index;
 		emit(compiler, op);
 	}
 	else
 	{
 		struct lusp_vm_op_t op;
 	
-		op.opcode = LUSP_VMOP_LOAD_GLOBAL;
-		op.load_global.index = 0; // $$$
+		op.opcode = LUSP_VMOP_GET_GLOBAL;
+		op.getset_global.index = 0; // $$$
 		emit(compiler, op);
 	}
 }
@@ -184,6 +184,83 @@ static void compile_call(struct compiler_t* compiler, struct lusp_object_t* func
 	emit(compiler, op);
 }
 
+static void compile_closure(struct compiler_t* compiler, struct lusp_object_t* args, struct lusp_object_t* body)
+{
+	// add new scope
+	struct scope_t scope;
+	scope.parent = compiler->scope;
+	scope.bind_count = 0;
+	
+	// fill new scope with arguments
+	while (args)
+	{
+		check(compiler, args->type == LUSP_OBJECT_CONS && args->cons.car && args->cons.car->type == LUSP_OBJECT_SYMBOL,
+			"lambda: malformed syntax");
+			
+		scope.binds[scope.bind_count++].name = args->cons.car->symbol.name; // $$$: detect duplicates
+		args = args->cons.cdr;
+	}
+	
+	// evaluate body in new scope
+	compiler->scope = &scope;
+	compile_list(compiler, body, false);
+	compiler->scope = scope.parent;
+	
+	// return
+	struct lusp_vm_op_t op;
+	
+	op.opcode = LUSP_VMOP_RETURN;
+	emit(compiler, op);
+}
+
+static void compile_lambda(struct compiler_t* compiler, struct lusp_object_t* args)
+{
+	check(compiler, args && args->type == LUSP_OBJECT_CONS, "lambda: malformed syntax");
+	
+	struct lusp_object_t* car = args->cons.car;
+	struct lusp_object_t* cdr = args->cons.cdr;
+	
+	compile_closure(compiler, car, cdr);
+}
+
+static void compile_define(struct compiler_t* compiler, struct lusp_object_t* args)
+{
+	check(compiler, args && args->type == LUSP_OBJECT_CONS, "define: malformed syntax");
+	
+	struct lusp_object_t* car = args->cons.car;
+	struct lusp_object_t* cdr = args->cons.cdr;
+	
+	check(compiler, car && (car->type == LUSP_OBJECT_SYMBOL || car->type == LUSP_OBJECT_CONS),
+		"define: first argument has to be either symbol or list");
+	check(compiler, car->type == LUSP_OBJECT_SYMBOL || car->cons.car->type == LUSP_OBJECT_SYMBOL,
+		"define: function declaration has to start with symbol");
+	
+	// get actual name
+	const char* name = (car->type == LUSP_OBJECT_SYMBOL) ? car->symbol.name : car->cons.car->symbol.name;
+	
+	// reserve slot in scope
+	unsigned int depth = 0; // $$$
+	unsigned int index = 0; // $$$
+	
+	// compile closure/value
+	if (car->type == LUSP_OBJECT_CONS)
+		compile_closure(compiler, car->cons.cdr, cdr);
+	else
+	{
+		check(compiler, !cdr || (cdr->type == LUSP_OBJECT_CONS && cdr->cons.cdr == 0), "define: malformed syntax");
+		
+		compile(compiler, cdr ? cdr->cons.car : 0);
+	}
+	
+	// set value to slot
+	struct lusp_vm_op_t op;
+	
+	op.opcode = LUSP_VMOP_SET_LOCAL;
+	op.getset_local.depth = depth;
+	op.getset_local.index = index;
+	emit(compiler, op);
+}
+
 static void compile_quote(struct compiler_t* compiler, struct lusp_object_t* args)
 {
 	compile_object(compiler, args);
@@ -204,6 +281,10 @@ static void compile_syntax(struct compiler_t* compiler, struct lusp_object_t* fu
 		compile_begin(compiler, args);
 	else if (str_is_equal(name, "quote"))
 		compile_quote(compiler, args);
+	else if (str_is_equal(name, "define"))
+		compile_define(compiler, args);
+	else if (str_is_equal(name, "lambda"))
+		compile_lambda(compiler, args);
 	else
 		compile_call(compiler, func, args);
 }
@@ -249,7 +330,11 @@ static void compile(struct compiler_t* compiler, struct lusp_object_t* object)
 static struct lusp_object_t* compile_program(struct compiler_t* compiler, struct lusp_object_t* object)
 {
 	// init compiler
-	compiler->scope = 0;
+	struct scope_t scope;
+	scope.parent = 0;
+	scope.bind_count = 0;
+	
+	compiler->scope = &scope;
 	
 	compiler->op_count = 0;
 	

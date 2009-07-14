@@ -10,30 +10,30 @@
 
 #include <stdio.h>
 
-struct lusp_object_t* lusp_eval(struct lusp_object_t* object)
+static void dump_bytecode(struct lusp_vm_bytecode_t* code)
 {
-	DL_ASSERT(object && object->type == LUSP_OBJECT_CLOSURE);
-	
-	struct lusp_vm_bytecode_t* code = object->closure.code;
-	
 	for (unsigned int i = 0; i < code->count; ++i)
 	{
 		struct lusp_vm_op_t* op = &code->ops[i];
 		
 		switch (op->opcode)
 		{
-		case LUSP_VMOP_LOAD_OBJECT:
-			printf("%02d: load_object %p [ ", i, op->load_object.object);
-			lusp_write(op->load_object.object);
+		case LUSP_VMOP_GET_OBJECT:
+			printf("%02d: get_object %p [ ", i, op->get_object.object);
+			lusp_write(op->get_object.object);
 			printf(" ]\n");
 			break;
 			
-		case LUSP_VMOP_LOAD_LOCAL:
-			printf("%02d: load_local %d %d\n", i, op->load_local.depth, op->load_local.index);
+		case LUSP_VMOP_GET_LOCAL:
+		case LUSP_VMOP_SET_LOCAL:
+			printf("%02d: %s_local %d %d\n", i, (op->opcode == LUSP_VMOP_SET_LOCAL) ? "set" : "get",
+				op->getset_local.depth, op->getset_local.index);
 			break;
 			
-		case LUSP_VMOP_LOAD_GLOBAL:
-			printf("%02d: load_global %d\n", i, op->load_global.index);
+		case LUSP_VMOP_GET_GLOBAL:
+		case LUSP_VMOP_SET_GLOBAL:
+			printf("%02d: %s_global %d\n", i, (op->opcode == LUSP_VMOP_SET_GLOBAL) ? "set" : "get",
+				op->getset_global.index);
 			break;
 			
 		case LUSP_VMOP_PUSH:
@@ -60,6 +60,15 @@ struct lusp_object_t* lusp_eval(struct lusp_object_t* object)
 			printf("%02d: unknown\n", i);
 		}
 	}
+}
+
+struct lusp_object_t* lusp_eval(struct lusp_object_t* object)
+{
+	if (!object || object->type != LUSP_OBJECT_CLOSURE) return 0;
+	
+	struct lusp_vm_bytecode_t* code = object->closure.code;
+	
+	dump_bytecode(code);
 
 	return 0;
 }

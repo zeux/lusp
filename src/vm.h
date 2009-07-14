@@ -6,9 +6,11 @@ struct lusp_object_t;
 
 enum lusp_vm_opcode_t
 {
-	LUSP_VMOP_LOAD_OBJECT,
-	LUSP_VMOP_LOAD_LOCAL,
-	LUSP_VMOP_LOAD_GLOBAL,
+	LUSP_VMOP_GET_OBJECT,
+	LUSP_VMOP_GET_LOCAL,
+	LUSP_VMOP_SET_LOCAL,
+	LUSP_VMOP_GET_GLOBAL,
+	LUSP_VMOP_SET_GLOBAL,
 	LUSP_VMOP_PUSH,
 	LUSP_VMOP_BIND,
 	LUSP_VMOP_PUSH_CONTINUATION,
@@ -25,35 +27,23 @@ struct lusp_vm_op_t
 		struct
 		{
 			struct lusp_object_t* object;
-		} load_object;
+		} get_object;
 		
 		struct
 		{
 			unsigned int depth;
 			unsigned int index;
-		} load_local;
+		} getset_local;
 		
 		struct
 		{
 			unsigned int index;
-		} load_global;
-		
-		struct
-		{
-		} push;
+		} getset_global;
 		
 		struct
 		{
 			unsigned int count;
 		} bind;
-		
-		struct
-		{
-		} push_continuation;
-		
-		struct
-		{
-		} call;
 	};
 };
 
