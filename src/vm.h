@@ -13,7 +13,7 @@ enum lusp_vm_opcode_t
 	LUSP_VMOP_SET_GLOBAL,
 	LUSP_VMOP_PUSH,
 	LUSP_VMOP_BIND,
-	LUSP_VMOP_PUSH_CONTINUATION,
+	LUSP_VMOP_UNBIND,
 	LUSP_VMOP_CALL,
 	LUSP_VMOP_RETURN,
 };
@@ -44,6 +44,11 @@ struct lusp_vm_op_t
 		{
 			unsigned int count;
 		} bind;
+		
+		struct
+		{
+            unsigned int count;
+		} call;
 	};
 };
 

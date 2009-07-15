@@ -44,8 +44,8 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code)
 			printf("%02d: bind %d\n", i, op->bind.count);
 			break;
 			
-		case LUSP_VMOP_PUSH_CONTINUATION:
-			printf("%02d: push_continuation\n", i);
+		case LUSP_VMOP_UNBIND:
+			printf("%02d: unbind\n", i);
 			break;
 			
 		case LUSP_VMOP_CALL:

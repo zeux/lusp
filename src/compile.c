@@ -161,25 +161,17 @@ static unsigned int compile_list(struct compiler_t* compiler, struct lusp_object
 
 static void compile_call(struct compiler_t* compiler, struct lusp_object_t* func, struct lusp_object_t* args)
 {
-	struct lusp_vm_op_t op;
-	
-	// push current continuation
-	op.opcode = LUSP_VMOP_PUSH_CONTINUATION;
-	emit(compiler, op);
-	
 	// evaluate function arguments left to right to stack
 	unsigned int arg_count = compile_list(compiler, args, true);
-	
-	// bind function arguments as a new environment frame
-	op.opcode = LUSP_VMOP_BIND;
-	op.bind.count = arg_count;
-	emit(compiler, op);
 	
 	// evaluate function
 	compile(compiler, func);
 	
 	// call function
+	struct lusp_vm_op_t op;
+	
 	op.opcode = LUSP_VMOP_CALL;
+	op.call.count = arg_count;
 	emit(compiler, op);
 }
 
@@ -231,7 +223,7 @@ static void compile_let(struct compiler_t* compiler, struct lusp_object_t* args)
 	{
 		check(compiler, vdlist->type == LUSP_OBJECT_CONS, "lambda: malformed syntax");
 		
-		struct lusp_object_t* vardecl = car->cons.car;
+		struct lusp_object_t* vardecl = vdlist->cons.car;
 		
 		check(compiler, vardecl && vardecl->type == LUSP_OBJECT_CONS, "lambda: malformed syntax");
 		
@@ -265,6 +257,10 @@ static void compile_let(struct compiler_t* compiler, struct lusp_object_t* args)
 	compiler->scope = &scope;
 	compile_list(compiler, cdr, false);
 	compiler->scope = scope.parent;
+	
+	// unbind new frame
+	op.opcode = LUSP_VMOP_UNBIND;
+	emit(compiler, op);
 }
 
 static void compile_lambda(struct compiler_t* compiler, struct lusp_object_t* args)
