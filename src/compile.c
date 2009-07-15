@@ -266,10 +266,6 @@ static void compile_define(struct compiler_t* compiler, struct lusp_object_t* ar
 	// get actual name
 	const char* name = (car->type == LUSP_OBJECT_SYMBOL) ? car->symbol.name : car->cons.car->symbol.name;
 	
-	// reserve slot in scope
-	unsigned int depth = 0; // $$$
-	unsigned int index = 0; // $$$
-	
 	// compile closure/value
 	if (car->type == LUSP_OBJECT_CONS)
 	{
@@ -287,9 +283,8 @@ static void compile_define(struct compiler_t* compiler, struct lusp_object_t* ar
 	// set value to slot
 	struct lusp_vm_op_t op;
 	
-	op.opcode = LUSP_VMOP_SET_LOCAL;
-	op.getset_local.depth = depth;
-	op.getset_local.index = index;
+	op.opcode = LUSP_VMOP_SET_GLOBAL; // $$$ support local defines
+	op.getset_global.slot = lusp_environment_get_slot(compiler->env, name);
 	emit(compiler, op);
 }
 
