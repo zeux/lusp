@@ -212,6 +212,61 @@ static void compile_closure(struct compiler_t* compiler, struct lusp_object_t* a
 	emit(compiler, op);
 }
 
+static void compile_let(struct compiler_t* compiler, struct lusp_object_t* args)
+{
+	check(compiler, args && args->type == LUSP_OBJECT_CONS, "let: malformed syntax");
+	
+	struct lusp_object_t* car = args->cons.car;
+	struct lusp_object_t* cdr = args->cons.cdr;
+	
+	check(compiler, !car || car->type == LUSP_OBJECT_CONS, "let: first argument has to be a list");
+	
+	// add new scope
+	struct scope_t scope;
+	scope.parent = compiler->scope;
+	scope.bind_count = 0;
+	
+	// fill new scope with arguments and compute values
+	for (struct lusp_object_t* vdlist = car; vdlist; vdlist = vdlist->cons.cdr)
+	{
+		check(compiler, vdlist->type == LUSP_OBJECT_CONS, "lambda: malformed syntax");
+		
+		struct lusp_object_t* vardecl = car->cons.car;
+		
+		check(compiler, vardecl && vardecl->type == LUSP_OBJECT_CONS, "lambda: malformed syntax");
+		
+		struct lusp_object_t* var = vardecl->cons.car;
+		struct lusp_object_t* decl = vardecl->cons.cdr;
+		
+		check(compiler, var && var->type == LUSP_OBJECT_SYMBOL, "lambda: malformed syntax");
+		check(compiler, decl && decl->type == LUSP_OBJECT_CONS && decl->cons.cdr == 0, "lambda: malformed syntax");
+			
+		// add value to new scope
+		scope.binds[scope.bind_count++].name = var->symbol.name; // $$$: detect duplicates
+		
+		// compute value in the old scope
+		compile(compiler, decl->cons.car);
+		
+		// push value on stack
+		struct lusp_vm_op_t op;
+		
+		op.opcode = LUSP_VMOP_PUSH;
+		emit(compiler, op);
+	}
+	
+	// bind everything
+	struct lusp_vm_op_t op;
+	
+	op.opcode = LUSP_VMOP_BIND;
+	op.bind.count = scope.bind_count;
+	emit(compiler, op);
+	
+	// evaluate body in new scope
+	compiler->scope = &scope;
+	compile_list(compiler, cdr, false);
+	compiler->scope = scope.parent;
+}
+
 static void compile_lambda(struct compiler_t* compiler, struct lusp_object_t* args)
 {
 	check(compiler, args && args->type == LUSP_OBJECT_CONS, "lambda: malformed syntax");
@@ -284,6 +339,8 @@ static void compile_syntax(struct compiler_t* compiler, struct lusp_object_t* fu
 		compile_define(compiler, args);
 	else if (str_is_equal(name, "lambda"))
 		compile_lambda(compiler, args);
+	else if (str_is_equal(name, "let"))
+		compile_let(compiler, args);
 	else
 		compile_call(compiler, func, args);
 }
