@@ -3,7 +3,9 @@
 #pragma once
 
 struct lusp_object_t;
+struct lusp_environment_t;
 struct lusp_environment_slot_t;
+struct lusp_vm_bytecode_t;
 
 enum lusp_vm_opcode_t
 {
@@ -18,7 +20,8 @@ enum lusp_vm_opcode_t
 	LUSP_VMOP_CALL,
 	LUSP_VMOP_RETURN,
 	LUSP_VMOP_JUMP,
-	LUSP_VMOP_JUMP_IFNOT
+	LUSP_VMOP_JUMP_IFNOT,
+	LUSP_VMOP_CREATE_CLOSURE
 };
 
 struct lusp_vm_op_t
@@ -57,26 +60,26 @@ struct lusp_vm_op_t
 		{
 		    unsigned int index;
 		} jump;
+		
+		struct
+		{
+		    struct lusp_vm_bytecode_t* code;
+		} create_closure;
 	};
 };
 
-struct lusp_vm_environment_t
+struct lusp_vm_bind_frame_t
 {
-	struct lusp_vm_environment_t* parent;
+	struct lusp_vm_bind_frame_t* parent;
 	
 	struct lusp_object_t** binds;
 	unsigned int count;
 };
 
-struct lusp_vm_continuation_t
-{
-	struct lusp_vm_op_t* pc;
-	struct lusp_vm_environment_t* envt;
-	struct lusp_vm_continuation_t* cont;
-};
-
 struct lusp_vm_bytecode_t
 {
+    struct lusp_environment_t* env;
+
 	struct lusp_vm_op_t* ops;
 	unsigned int count;
 };

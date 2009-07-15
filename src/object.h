@@ -2,8 +2,9 @@
 
 #pragma once
 
-struct lusp_vm_environment_t;
+struct lusp_vm_bind_frame_t;
 struct lusp_vm_bytecode_t;
+struct lusp_environment_t;
 
 enum lusp_object_type_t
 {
@@ -13,8 +14,13 @@ enum lusp_object_type_t
 	LUSP_OBJECT_REAL,
 	LUSP_OBJECT_STRING,
 	LUSP_OBJECT_CONS,
-	LUSP_OBJECT_CLOSURE
+	LUSP_OBJECT_CLOSURE,
+	LUSP_OBJECT_PROCEDURE
 };
+
+struct lusp_object_t;
+
+typedef struct lusp_object_t* (*lusp_procedure_t)(struct lusp_environment_t* env, struct lusp_object_t** args, unsigned int count);
 
 struct lusp_object_t
 {
@@ -55,9 +61,14 @@ struct lusp_object_t
 		
 		struct
 		{
-			struct lusp_vm_environment_t* env;
+			struct lusp_vm_bind_frame_t* frame;
 			struct lusp_vm_bytecode_t* code;
 		} closure;
+		
+		struct
+		{
+		    lusp_procedure_t code;
+		} procedure;
 	};
 };
 
@@ -67,3 +78,5 @@ struct lusp_object_t* lusp_mkinteger(int value);
 struct lusp_object_t* lusp_mkreal(float value);
 struct lusp_object_t* lusp_mkstring(const char* value);
 struct lusp_object_t* lusp_mkcons(struct lusp_object_t* car, struct lusp_object_t* cdr);
+struct lusp_object_t* lusp_mkclosure(struct lusp_vm_bind_frame_t* frame, struct lusp_vm_bytecode_t* code);
+struct lusp_object_t* lusp_mkprocedure(lusp_procedure_t code);

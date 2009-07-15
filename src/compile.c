@@ -92,7 +92,7 @@ static inline void emit(struct compiler_t* compiler, struct lusp_vm_op_t op)
 	compiler->ops[compiler->op_count++] = op;
 }
 
-static struct lusp_object_t* create_closure(struct lusp_environment_t* env, struct lusp_object_t* args, struct lusp_object_t* body, jmp_buf* error);
+static struct lusp_vm_bytecode_t* create_closure(struct lusp_environment_t* env, struct lusp_object_t* args, struct lusp_object_t* body, jmp_buf* error);
 static void compile(struct compiler_t* compiler, struct lusp_object_t* object);
 
 static void compile_object(struct compiler_t* compiler, struct lusp_object_t* object)
@@ -363,16 +363,22 @@ static void compile_let(struct compiler_t* compiler, struct lusp_object_t* args)
 	emit(compiler, op);
 }
 
+static void compile_closure(struct compiler_t* compiler, struct lusp_object_t* args, struct lusp_object_t* body)
+{
+	struct lusp_vm_bytecode_t* bytecode = create_closure(compiler->env, args, body, compiler->error);
+	
+	struct lusp_vm_op_t op;
+	
+	op.opcode = LUSP_VMOP_CREATE_CLOSURE;
+	op.create_closure.code = bytecode;
+	emit(compiler, op);
+}
+
 static void compile_lambda(struct compiler_t* compiler, struct lusp_object_t* args)
 {
 	check(compiler, args && args->type == LUSP_OBJECT_CONS, "lambda: malformed syntax");
 	
-	struct lusp_object_t* car = args->cons.car;
-	struct lusp_object_t* cdr = args->cons.cdr;
-	
-	struct lusp_object_t* closure = create_closure(compiler->env, car, cdr, compiler->error);
-	
-	compile_object(compiler, closure);
+	compile_closure(compiler, args->cons.car, args->cons.cdr);
 }
 
 static void compile_define(struct compiler_t* compiler, struct lusp_object_t* args)
@@ -392,11 +398,7 @@ static void compile_define(struct compiler_t* compiler, struct lusp_object_t* ar
 	
 	// compile closure/value
 	if (car->type == LUSP_OBJECT_CONS)
-	{
-    	struct lusp_object_t* closure = create_closure(compiler->env, car->cons.cdr, cdr, compiler->error);
-	
-    	compile_object(compiler, closure);
-	}
+    	compile_closure(compiler, car->cons.cdr, cdr);
 	else
 	{
 		check(compiler, !cdr || (cdr->type == LUSP_OBJECT_CONS && cdr->cons.cdr == 0), "define: malformed syntax");
@@ -486,7 +488,7 @@ static void compile(struct compiler_t* compiler, struct lusp_object_t* object)
 	}
 }
 
-static void compile_closure(struct compiler_t* compiler, struct lusp_object_t* args, struct lusp_object_t* body)
+static void compile_closure_code(struct compiler_t* compiler, struct lusp_object_t* args, struct lusp_object_t* body)
 {
     DL_ASSERT(compiler->scope == 0);
     
@@ -530,7 +532,7 @@ static void compile_closure(struct compiler_t* compiler, struct lusp_object_t* a
     emit(compiler, op);
 }
 
-static struct lusp_object_t* create_closure(struct lusp_environment_t* env, struct lusp_object_t* args, struct lusp_object_t* body, jmp_buf* error)
+static struct lusp_vm_bytecode_t* create_closure(struct lusp_environment_t* env, struct lusp_object_t* args, struct lusp_object_t* body, jmp_buf* error)
 {
     // create compiler
     struct compiler_t compiler;
@@ -541,22 +543,18 @@ static struct lusp_object_t* create_closure(struct lusp_environment_t* env, stru
     compiler.error = error;
     
     // compile closure code
-    compile_closure(&compiler, args, body);
+    compile_closure_code(&compiler, args, body);
     
     // create new closure
     struct lusp_vm_op_t* ops = MEM_ARENA_NEW_ARRAY(&g_lusp_heap, struct lusp_vm_op_t, compiler.op_count);
     memcpy(ops, compiler.ops, compiler.op_count * sizeof(struct lusp_vm_op_t));
 
     struct lusp_vm_bytecode_t* code = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_vm_bytecode_t);
+    code->env = env;
     code->ops = ops;
     code->count = compiler.op_count;
 
-    struct lusp_object_t* result = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_object_t);
-    result->type = LUSP_OBJECT_CLOSURE;
-    result->closure.env = 0;
-    result->closure.code = code;
-
-    return result;
+    return code;
 }
 
 struct lusp_object_t* lusp_compile(struct lusp_environment_t* env, struct lusp_object_t* object)
@@ -565,5 +563,7 @@ struct lusp_object_t* lusp_compile(struct lusp_environment_t* env, struct lusp_o
 	
 	if (setjmp(buf)) return 0;
 	
-	return create_closure(env, 0, object, &buf);
+	struct lusp_vm_bytecode_t* bytecode = create_closure(env, 0, object, &buf);
+	
+	return lusp_mkclosure(0, bytecode);
 }

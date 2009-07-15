@@ -72,3 +72,18 @@ struct lusp_object_t* lusp_mkcons(struct lusp_object_t* car, struct lusp_object_
 	result->cons.cdr = cdr;
 	return result;
 }
+
+struct lusp_object_t* lusp_mkclosure(struct lusp_vm_bind_frame_t* frame, struct lusp_vm_bytecode_t* code)
+{
+    struct lusp_object_t* result = mkobject(LUSP_OBJECT_CLOSURE);
+    result->closure.frame = frame;
+    result->closure.code = code;
+    return result;
+}
+
+struct lusp_object_t* lusp_mkprocedure(lusp_procedure_t code)
+{
+    struct lusp_object_t* result = mkobject(LUSP_OBJECT_PROCEDURE);
+    result->procedure.code = code;
+    return result;
+}

@@ -25,17 +25,6 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, b
 			printf("%s%02d: get_object %p [ ", indent, i, op->get_object.object);
 			lusp_write(op->get_object.object);
 			printf(" ]\n");
-			
-			if (op->get_object.object && op->get_object.object->type == LUSP_OBJECT_CLOSURE && deep)
-			{
-			    char new_indent[256];
-			    
-			    str_copy(new_indent, sizeof(new_indent), indent);
-			    str_concat(new_indent, sizeof(new_indent), "\t");
-			    
-			    dump_bytecode(op->get_object.object->closure.code, new_indent, deep);
-			}
-			
 			break;
 			
 		case LUSP_VMOP_GET_LOCAL:
@@ -77,6 +66,18 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, b
 		case LUSP_VMOP_JUMP_IFNOT:
 			printf("%s%02d: jump_ifnot %d\n", indent, i, op->jump.index);
 			break;
+			
+		case LUSP_VMOP_CREATE_CLOSURE:
+		{
+			printf("%s%02d: create_closure %p\n", indent, i, op->create_closure.code);
+			
+		    char new_indent[256];
+		    
+		    str_copy(new_indent, sizeof(new_indent), indent);
+		    str_concat(new_indent, sizeof(new_indent), "\t");
+		    
+		    dump_bytecode(op->create_closure.code, new_indent, deep);
+		} break;
 			
 		default:
 			printf("%s%02d: unknown\n", indent, i);
