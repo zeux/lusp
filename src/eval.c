@@ -73,7 +73,7 @@ static inline struct lusp_vm_bind_frame_t* get_frame(struct lusp_vm_bind_frame_t
     return top;
 }
 
-struct lusp_object_t* eval(struct lusp_vm_bytecode_t* bytecode)
+static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* bytecode)
 {
     struct continuation_t continuation_stack[1024];
     unsigned int continuation_stack_top = 0;
