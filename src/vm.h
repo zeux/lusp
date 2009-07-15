@@ -83,6 +83,8 @@ struct lusp_vm_bytecode_t
 
 	struct lusp_vm_op_t* ops;
 	unsigned int count;
+
+	void* jit;
 };
 
 void lusp_dump_bytecode(struct lusp_vm_bytecode_t* code, bool deep);

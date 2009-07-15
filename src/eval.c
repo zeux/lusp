@@ -7,6 +7,7 @@
 #include <lusp/vm.h>
 #include <lusp/environment.h>
 #include <lusp/object.h>
+#include <lusp/jit.h>
 
 #include <core/memory.h>
 #include <mem/arena.h>
@@ -207,6 +208,10 @@ struct lusp_object_t* lusp_eval(struct lusp_object_t* object)
 	if (!object || object->type != LUSP_OBJECT_CLOSURE) return 0;
 	
 	struct lusp_vm_bytecode_t* code = object->closure.code;
+	
+	if (!code->jit) lusp_compile_jit(code);
+	
+	return lusp_eval_jit(code);
 	
     return eval(code);
 }

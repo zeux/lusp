@@ -553,7 +553,8 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* parent, stru
     code->env = parent->env;
     code->ops = ops;
     code->count = compiler.op_count;
-
+	code->jit = 0;
+	
     return code;
 }
 
