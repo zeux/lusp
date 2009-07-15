@@ -92,6 +92,7 @@ static inline void emit(struct compiler_t* compiler, struct lusp_vm_op_t op)
 	compiler->ops[compiler->op_count++] = op;
 }
 
+static struct lusp_object_t* create_closure(struct lusp_environment_t* env, struct lusp_object_t* args, struct lusp_object_t* body, jmp_buf* error);
 static void compile(struct compiler_t* compiler, struct lusp_object_t* object);
 
 static void compile_object(struct compiler_t* compiler, struct lusp_object_t* object)
@@ -179,35 +180,6 @@ static void compile_call(struct compiler_t* compiler, struct lusp_object_t* func
 	emit(compiler, op);
 }
 
-static void compile_closure(struct compiler_t* compiler, struct lusp_object_t* args, struct lusp_object_t* body)
-{
-	// add new scope
-	struct scope_t scope;
-	scope.parent = compiler->scope;
-	scope.bind_count = 0;
-	
-	// fill new scope with arguments
-	while (args)
-	{
-		check(compiler, args->type == LUSP_OBJECT_CONS && args->cons.car && args->cons.car->type == LUSP_OBJECT_SYMBOL,
-			"lambda: malformed syntax");
-			
-		scope.binds[scope.bind_count++].name = args->cons.car->symbol.name; // $$$: detect duplicates
-		args = args->cons.cdr;
-	}
-	
-	// evaluate body in new scope
-	compiler->scope = &scope;
-	compile_list(compiler, body, false);
-	compiler->scope = scope.parent;
-	
-	// return
-	struct lusp_vm_op_t op;
-	
-	op.opcode = LUSP_VMOP_RETURN;
-	emit(compiler, op);
-}
-
 static void compile_let(struct compiler_t* compiler, struct lusp_object_t* args)
 {
 	check(compiler, args && args->type == LUSP_OBJECT_CONS, "let: malformed syntax");
@@ -274,7 +246,9 @@ static void compile_lambda(struct compiler_t* compiler, struct lusp_object_t* ar
 	struct lusp_object_t* car = args->cons.car;
 	struct lusp_object_t* cdr = args->cons.cdr;
 	
-	compile_closure(compiler, car, cdr);
+	struct lusp_object_t* closure = create_closure(compiler->env, car, cdr, compiler->error);
+	
+	compile_object(compiler, closure);
 }
 
 static void compile_define(struct compiler_t* compiler, struct lusp_object_t* args)
@@ -298,7 +272,11 @@ static void compile_define(struct compiler_t* compiler, struct lusp_object_t* ar
 	
 	// compile closure/value
 	if (car->type == LUSP_OBJECT_CONS)
-		compile_closure(compiler, car->cons.cdr, cdr);
+	{
+    	struct lusp_object_t* closure = create_closure(compiler->env, car->cons.cdr, cdr, compiler->error);
+	
+    	compile_object(compiler, closure);
+	}
 	else
 	{
 		check(compiler, !cdr || (cdr->type == LUSP_OBJECT_CONS && cdr->cons.cdr == 0), "define: malformed syntax");
@@ -383,46 +361,80 @@ static void compile(struct compiler_t* compiler, struct lusp_object_t* object)
 	}
 }
 
-static struct lusp_object_t* compile_program(struct compiler_t* compiler, struct lusp_environment_t* env, struct lusp_object_t* object)
+static void compile_closure(struct compiler_t* compiler, struct lusp_object_t* args, struct lusp_object_t* body)
 {
-	// init compiler
-	compiler->env = env;
-	
-	struct scope_t scope;
-	scope.parent = 0;
-	scope.bind_count = 0;
-	
-	compiler->scope = &scope;
-	
-	compiler->op_count = 0;
-	
-	// compile expression
-	compile(compiler, object);
-	
-	// create new closure
-	struct lusp_vm_op_t* ops = MEM_ARENA_NEW_ARRAY(&g_lusp_heap, struct lusp_vm_op_t, compiler->op_count);
-	memcpy(ops, compiler->ops, compiler->op_count * sizeof(struct lusp_vm_op_t));
-	
-	struct lusp_vm_bytecode_t* code = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_vm_bytecode_t);
-	code->ops = ops;
-	code->count = compiler->op_count;
-	
-	struct lusp_object_t* result = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_object_t);
-	result->type = LUSP_OBJECT_CLOSURE;
-	result->closure.env = 0;
-	result->closure.code = code;
-	
-	return result;
+    DL_ASSERT(compiler->scope == 0);
+    
+    // add top-level scope
+    struct scope_t scope;
+    scope.parent = 0;
+    scope.bind_count = 0;
+
+    compiler->scope = &scope;
+    
+    // fill scope with arguments
+    for (struct lusp_object_t* arg = args; arg; arg = arg->cons.cdr)
+    {
+        check(compiler, arg->type == LUSP_OBJECT_CONS && arg->cons.car && arg->cons.car->type == LUSP_OBJECT_SYMBOL,
+            "lambda: malformed syntax");
+            
+        const char* name = arg->cons.car->symbol.name;
+        unsigned int index;
+        
+        check(compiler, !find_bind_local(&scope, name, &index), "lambda: duplicate arguments detected");
+
+        scope.binds[scope.bind_count++].name = name;
+    }
+    
+    // bind arguments
+    struct lusp_vm_op_t op;
+    
+    op.opcode = LUSP_VMOP_BIND;
+    op.bind.count = scope.bind_count;
+    emit(compiler, op);
+
+    // compile body
+    compile_list(compiler, body, false);
+
+    // return
+    op.opcode = LUSP_VMOP_RETURN;
+    emit(compiler, op);
+}
+
+static struct lusp_object_t* create_closure(struct lusp_environment_t* env, struct lusp_object_t* args, struct lusp_object_t* body, jmp_buf* error)
+{
+    // create compiler
+    struct compiler_t compiler;
+    
+    compiler.env = env;
+    compiler.scope = 0;
+    compiler.op_count = 0;
+    compiler.error = error;
+    
+    // compile closure code
+    compile_closure(&compiler, args, body);
+    
+    // create new closure
+    struct lusp_vm_op_t* ops = MEM_ARENA_NEW_ARRAY(&g_lusp_heap, struct lusp_vm_op_t, compiler.op_count);
+    memcpy(ops, compiler.ops, compiler.op_count * sizeof(struct lusp_vm_op_t));
+
+    struct lusp_vm_bytecode_t* code = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_vm_bytecode_t);
+    code->ops = ops;
+    code->count = compiler.op_count;
+
+    struct lusp_object_t* result = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_object_t);
+    result->type = LUSP_OBJECT_CLOSURE;
+    result->closure.env = 0;
+    result->closure.code = code;
+
+    return result;
 }
 
 struct lusp_object_t* lusp_compile(struct lusp_environment_t* env, struct lusp_object_t* object)
 {
 	jmp_buf buf;
-	struct compiler_t compiler;
-	
-	compiler.error = &buf;
 	
 	if (setjmp(buf)) return 0;
 	
-	return compile_program(&compiler, env, object);
+	return create_closure(env, 0, object, &buf);
 }
