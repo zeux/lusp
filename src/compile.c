@@ -499,27 +499,18 @@ static void compile_closure_code(struct compiler_t* compiler, struct lusp_object
     for (struct lusp_object_t* arg = args; arg; arg = arg->cons.cdr)
     {
         check(compiler, arg->type == LUSP_OBJECT_CONS || arg->type == LUSP_OBJECT_SYMBOL, "lambda: malformed syntax");
+        check(compiler, arg->type == LUSP_OBJECT_SYMBOL || (arg->cons.car && arg->cons.car->type == LUSP_OBJECT_SYMBOL), "lambda: malformed syntax");
         
-        const char* name;
+        rest = (arg->type == LUSP_OBJECT_SYMBOL);
         
-        if (arg->type == LUSP_OBJECT_CONS)
-        {
-            check(compiler, arg->cons.car && arg->cons.car->type == LUSP_OBJECT_SYMBOL, "lambda: malformed syntax");
-            
-            name = arg->cons.car->symbol.name;
-        }
-        else
-        {
-            rest = true;
-            
-            name = arg->symbol.name;
-        }
-            
+        const char* name = (arg->type == LUSP_OBJECT_CONS) ? arg->cons.car->symbol.name : arg->symbol.name;
         unsigned int index;
         
         check(compiler, !find_bind_local(&scope, name, &index), "lambda: duplicate arguments detected");
 
         scope.binds[scope.bind_count++].name = name;
+        
+        if (rest) break;
     }
     
     // bind arguments
