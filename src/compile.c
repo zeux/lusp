@@ -246,6 +246,84 @@ static void compile_set(struct compiler_t* compiler, struct lusp_object_t* args)
     compile_symbol_getset(compiler, car, true);
 }
 
+static void compile_let_pushvardecl(struct compiler_t* compiler, struct scope_t* scope, struct lusp_object_t* vardecl)
+{
+    check(compiler, vardecl && vardecl->type == LUSP_OBJECT_CONS, "let: malformed syntax");
+
+    struct lusp_object_t* var = vardecl->cons.car;
+    struct lusp_object_t* decl = vardecl->cons.cdr;
+
+    check(compiler, var && var->type == LUSP_OBJECT_SYMBOL, "let: malformed syntax");
+    check(compiler, decl && decl->type == LUSP_OBJECT_CONS && decl->cons.cdr == 0, "let: malformed syntax");
+
+    // add value to new scope
+    const char* name = var->symbol.name;
+    unsigned int index;
+    
+    check(compiler, !find_bind_local(scope, name, &index), "let: duplicate arguments detected");
+    
+    scope->binds[scope->bind_count++].name = name;
+
+    // compute value in the old scope
+    compile(compiler, decl->cons.car);
+
+    // push value on stack
+    struct lusp_vm_op_t op;
+
+    op.opcode = LUSP_VMOP_PUSH;
+    emit(compiler, op);
+}
+
+static void compile_letseq_helper(struct compiler_t* compiler, struct lusp_object_t* args, struct lusp_object_t* body)
+{
+    // just compile the body if there are no arguments
+	if (!args)
+	{
+	    compile_list(compiler, body, false);
+	    return;
+	}
+	
+	// add new scope
+	struct scope_t scope;
+	scope.parent = compiler->scope;
+	scope.bind_count = 0;
+	
+	// push scope
+	compiler->scope = &scope;
+	
+	// add first binding
+	check(compiler, args && args->type == LUSP_OBJECT_CONS, "let*: malformed syntax");
+	
+	compile_let_pushvardecl(compiler, &scope, args->cons.car);
+	
+	// create binding
+	struct lusp_vm_op_t op;
+	
+	op.opcode = LUSP_VMOP_BIND;
+	op.bind.count = scope.bind_count;
+	emit(compiler, op);
+	
+	// evaluate the rest recursively
+	compile_letseq_helper(compiler, args->cons.cdr, body);
+	
+	// unbind
+	op.opcode = LUSP_VMOP_UNBIND;
+	emit(compiler, op);
+	
+	// pop scope
+	compiler->scope = scope.parent;
+}
+
+static void compile_letseq(struct compiler_t* compiler, struct lusp_object_t* args)
+{
+	check(compiler, args && args->type == LUSP_OBJECT_CONS, "let*: malformed syntax");
+	
+	struct lusp_object_t* car = args->cons.car;
+	struct lusp_object_t* cdr = args->cons.cdr;
+	
+	compile_letseq_helper(compiler, car, cdr);
+}
+
 static void compile_let(struct compiler_t* compiler, struct lusp_object_t* args)
 {
 	check(compiler, args && args->type == LUSP_OBJECT_CONS, "let: malformed syntax");
@@ -265,27 +343,7 @@ static void compile_let(struct compiler_t* compiler, struct lusp_object_t* args)
 	{
 		check(compiler, vdlist->type == LUSP_OBJECT_CONS, "let: malformed syntax");
 		
-		struct lusp_object_t* vardecl = vdlist->cons.car;
-		
-		check(compiler, vardecl && vardecl->type == LUSP_OBJECT_CONS, "let: malformed syntax");
-		
-		struct lusp_object_t* var = vardecl->cons.car;
-		struct lusp_object_t* decl = vardecl->cons.cdr;
-		
-		check(compiler, var && var->type == LUSP_OBJECT_SYMBOL, "let: malformed syntax");
-		check(compiler, decl && decl->type == LUSP_OBJECT_CONS && decl->cons.cdr == 0, "let: malformed syntax");
-			
-		// add value to new scope
-		scope.binds[scope.bind_count++].name = var->symbol.name; // $$$: detect duplicates
-		
-		// compute value in the old scope
-		compile(compiler, decl->cons.car);
-		
-		// push value on stack
-		struct lusp_vm_op_t op;
-		
-		op.opcode = LUSP_VMOP_PUSH;
-		emit(compiler, op);
+		compile_let_pushvardecl(compiler, &scope, vdlist->cons.car);
 	}
 	
 	// bind everything
@@ -380,6 +438,8 @@ static void compile_syntax(struct compiler_t* compiler, struct lusp_object_t* fu
 		compile_lambda(compiler, args);
 	else if (str_is_equal(name, "let"))
 		compile_let(compiler, args);
+	else if (str_is_equal(name, "let*"))
+		compile_letseq(compiler, args);
 	else if (str_is_equal(name, "set!"))
 		compile_set(compiler, args);
 	else if (str_is_equal(name, "if"))
