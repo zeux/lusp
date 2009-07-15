@@ -128,7 +128,7 @@ struct lusp_object_t* eval(struct lusp_vm_bytecode_t* bytecode)
             break;
             
         case LUSP_VMOP_BIND:
-            DL_ASSERT(eval_stack_top >= op->bind.count && call_count == op->bind.count);
+            DL_ASSERT(eval_stack_top >= op->bind.count);
             bind_frame = create_frame(bind_frame, eval_stack + eval_stack_top - op->bind.count, op->bind.count);
             eval_stack_top -= op->bind.count;
             break;
