@@ -45,6 +45,10 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, b
 			printf("%s%02d: bind %d\n", indent, i, op->bind.count);
 			break;
 			
+		case LUSP_VMOP_BIND_REST:
+			printf("%s%02d: bind_rest %d\n", indent, i, op->bind.count);
+			break;
+			
 		case LUSP_VMOP_UNBIND:
 			printf("%s%02d: unbind\n", indent, i);
 			break;

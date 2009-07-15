@@ -494,12 +494,27 @@ static void compile_closure_code(struct compiler_t* compiler, struct lusp_object
     compiler->scope = &scope;
     
     // fill scope with arguments
+    bool rest = false;
+    
     for (struct lusp_object_t* arg = args; arg; arg = arg->cons.cdr)
     {
-        check(compiler, arg->type == LUSP_OBJECT_CONS && arg->cons.car && arg->cons.car->type == LUSP_OBJECT_SYMBOL,
-            "lambda: malformed syntax");
+        check(compiler, arg->type == LUSP_OBJECT_CONS || arg->type == LUSP_OBJECT_SYMBOL, "lambda: malformed syntax");
+        
+        const char* name;
+        
+        if (arg->type == LUSP_OBJECT_CONS)
+        {
+            check(compiler, arg->cons.car && arg->cons.car->type == LUSP_OBJECT_SYMBOL, "lambda: malformed syntax");
             
-        const char* name = arg->cons.car->symbol.name;
+            name = arg->cons.car->symbol.name;
+        }
+        else
+        {
+            rest = true;
+            
+            name = arg->symbol.name;
+        }
+            
         unsigned int index;
         
         check(compiler, !find_bind_local(&scope, name, &index), "lambda: duplicate arguments detected");
@@ -510,8 +525,8 @@ static void compile_closure_code(struct compiler_t* compiler, struct lusp_object
     // bind arguments
     struct lusp_vm_op_t op;
     
-    op.opcode = LUSP_VMOP_BIND;
-    op.bind.count = scope.bind_count;
+    op.opcode = rest ? LUSP_VMOP_BIND_REST : LUSP_VMOP_BIND;
+    op.bind.count = scope.bind_count - rest;
     emit(compiler, op);
 
     // compile body

@@ -22,8 +22,10 @@ struct continuation_t
     unsigned int pc;
 };
 
-static inline struct lusp_vm_bind_frame_t* create_frame(struct lusp_vm_bind_frame_t* parent, struct lusp_object_t** values, unsigned int count)
+static inline struct lusp_vm_bind_frame_t* create_frame_impl(struct lusp_vm_bind_frame_t* parent, struct lusp_object_t** values, unsigned int count, unsigned int copy_count)
 {
+    DL_ASSERT(count >= copy_count);
+    
     struct lusp_vm_bind_frame_t* result = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_vm_bind_frame_t);
     DL_ASSERT(result);
     
@@ -32,9 +34,31 @@ static inline struct lusp_vm_bind_frame_t* create_frame(struct lusp_vm_bind_fram
     result->binds = MEM_ARENA_NEW_ARRAY(&g_lusp_heap, struct lusp_object_t*, count);
     DL_ASSERT(result->binds);
     
-    memcpy(result->binds, values, count * sizeof(struct lusp_object_t*));
+    memcpy(result->binds, values, copy_count * sizeof(struct lusp_object_t*));
     
     return result;
+}
+
+static inline struct lusp_vm_bind_frame_t* create_frame(struct lusp_vm_bind_frame_t* parent, struct lusp_object_t** values, unsigned int count)
+{
+    return create_frame_impl(parent, values, count, count);
+}
+
+static inline struct lusp_vm_bind_frame_t* create_frame_rest(struct lusp_vm_bind_frame_t* parent, struct lusp_object_t** values, unsigned int count, unsigned int rest_count)
+{
+    struct lusp_vm_bind_frame_t* result = create_frame_impl(parent, values, count + 1, count);
+    DL_ASSERT(result);
+    
+    // create rest list
+    struct lusp_object_t* rest = 0;
+    
+    for (unsigned int i = rest_count; i > 0; --i) rest = lusp_mkcons(values[i - 1], rest);
+    
+    // bind rest argument
+    result->binds[count] = rest;
+    
+    return result;
+    
 }
 
 static inline struct lusp_vm_bind_frame_t* get_frame(struct lusp_vm_bind_frame_t* top, unsigned int depth)
@@ -63,6 +87,8 @@ struct lusp_object_t* eval(struct lusp_vm_bytecode_t* bytecode)
     
     struct lusp_vm_bytecode_t* code = bytecode;
     unsigned int pc = 0;
+    
+    unsigned int call_count = 0;
     
     for (;;)
     {
@@ -102,9 +128,15 @@ struct lusp_object_t* eval(struct lusp_vm_bytecode_t* bytecode)
             break;
             
         case LUSP_VMOP_BIND:
-            DL_ASSERT(eval_stack_top >= op->bind.count);
+            DL_ASSERT(eval_stack_top >= op->bind.count && call_count == op->bind.count);
             bind_frame = create_frame(bind_frame, eval_stack + eval_stack_top - op->bind.count, op->bind.count);
             eval_stack_top -= op->bind.count;
+            break;
+            
+        case LUSP_VMOP_BIND_REST:
+            DL_ASSERT(eval_stack_top >= op->bind.count && call_count >= op->bind.count);
+            bind_frame = create_frame_rest(bind_frame, eval_stack + eval_stack_top - call_count, op->bind.count, call_count - op->bind.count);
+            eval_stack_top -= call_count;
             break;
             
         case LUSP_VMOP_UNBIND:
@@ -129,6 +161,7 @@ struct lusp_object_t* eval(struct lusp_vm_bytecode_t* bytecode)
                 bind_frame = value->closure.frame;
                 code = value->closure.code;
                 pc = 0;
+                call_count = op->call.count;
             }
             else
             {
