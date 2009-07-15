@@ -6,6 +6,7 @@
 
 #include <lusp/object.h>
 #include <lusp/vm.h>
+#include <lusp/environment.h>
 
 #include <core/string.h>
 #include <core/memory.h>
@@ -31,6 +32,9 @@ struct scope_t
 
 struct compiler_t
 {
+    // global environment
+    struct lusp_environment_t* env;
+    
 	// scope stack
 	struct scope_t* scope;
 	
@@ -127,7 +131,7 @@ static void compile_symbol(struct compiler_t* compiler, struct lusp_object_t* ob
 		struct lusp_vm_op_t op;
 	
 		op.opcode = LUSP_VMOP_GET_GLOBAL;
-		op.getset_global.index = 0; // $$$
+		op.getset_global.slot = lusp_environment_get_slot(compiler->env, object->symbol.name);
 		emit(compiler, op);
 	}
 }
@@ -379,9 +383,11 @@ static void compile(struct compiler_t* compiler, struct lusp_object_t* object)
 	}
 }
 
-static struct lusp_object_t* compile_program(struct compiler_t* compiler, struct lusp_object_t* object)
+static struct lusp_object_t* compile_program(struct compiler_t* compiler, struct lusp_environment_t* env, struct lusp_object_t* object)
 {
 	// init compiler
+	compiler->env = env;
+	
 	struct scope_t scope;
 	scope.parent = 0;
 	scope.bind_count = 0;
@@ -409,7 +415,7 @@ static struct lusp_object_t* compile_program(struct compiler_t* compiler, struct
 	return result;
 }
 
-struct lusp_object_t* lusp_compile(struct lusp_object_t* object)
+struct lusp_object_t* lusp_compile(struct lusp_environment_t* env, struct lusp_object_t* object)
 {
 	jmp_buf buf;
 	struct compiler_t compiler;
@@ -418,5 +424,5 @@ struct lusp_object_t* lusp_compile(struct lusp_object_t* object)
 	
 	if (setjmp(buf)) return 0;
 	
-	return compile_program((struct compiler_t*)&compiler, object);
+	return compile_program(&compiler, env, object);
 }

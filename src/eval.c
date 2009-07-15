@@ -7,6 +7,7 @@
 #include <lusp/vm.h>
 #include <lusp/object.h>
 #include <lusp/write.h>
+#include <lusp/environment.h>
 
 #include <stdio.h>
 
@@ -32,8 +33,8 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code)
 			
 		case LUSP_VMOP_GET_GLOBAL:
 		case LUSP_VMOP_SET_GLOBAL:
-			printf("%02d: %s_global %d\n", i, (op->opcode == LUSP_VMOP_SET_GLOBAL) ? "set" : "get",
-				op->getset_global.index);
+			printf("%02d: %s_global %p [ %s ]\n", i, (op->opcode == LUSP_VMOP_SET_GLOBAL) ? "set" : "get",
+				op->getset_global.slot, op->getset_global.slot->name);
 			break;
 			
 		case LUSP_VMOP_PUSH:

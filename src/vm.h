@@ -3,6 +3,7 @@
 #pragma once
 
 struct lusp_object_t;
+struct lusp_environment_slot_t;
 
 enum lusp_vm_opcode_t
 {
@@ -37,7 +38,7 @@ struct lusp_vm_op_t
 		
 		struct
 		{
-			unsigned int index;
+			struct lusp_environment_slot_t* slot;
 		} getset_global;
 		
 		struct
