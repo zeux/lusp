@@ -92,7 +92,7 @@ static inline void emit(struct compiler_t* compiler, struct lusp_vm_op_t op)
 	compiler->ops[compiler->op_count++] = op;
 }
 
-static struct lusp_vm_bytecode_t* create_closure(struct lusp_environment_t* env, struct lusp_object_t* args, struct lusp_object_t* body, jmp_buf* error);
+static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* parent, struct lusp_object_t* args, struct lusp_object_t* body);
 static void compile(struct compiler_t* compiler, struct lusp_object_t* object);
 
 static void compile_object(struct compiler_t* compiler, struct lusp_object_t* object)
@@ -288,9 +288,6 @@ static void compile_letseq_helper(struct compiler_t* compiler, struct lusp_objec
 	scope.parent = compiler->scope;
 	scope.bind_count = 0;
 	
-	// push scope
-	compiler->scope = &scope;
-	
 	// add first binding
 	check(compiler, args && args->type == LUSP_OBJECT_CONS, "let*: malformed syntax");
 	
@@ -303,15 +300,14 @@ static void compile_letseq_helper(struct compiler_t* compiler, struct lusp_objec
 	op.bind.count = scope.bind_count;
 	emit(compiler, op);
 	
-	// evaluate the rest recursively
+	// evaluate the rest recursively in the new scope
+    compiler->scope = &scope;
 	compile_letseq_helper(compiler, args->cons.cdr, body);
+	compiler->scope = scope.parent;
 	
 	// unbind
 	op.opcode = LUSP_VMOP_UNBIND;
 	emit(compiler, op);
-	
-	// pop scope
-	compiler->scope = scope.parent;
 }
 
 static void compile_letseq(struct compiler_t* compiler, struct lusp_object_t* args)
@@ -365,7 +361,7 @@ static void compile_let(struct compiler_t* compiler, struct lusp_object_t* args)
 
 static void compile_closure(struct compiler_t* compiler, struct lusp_object_t* args, struct lusp_object_t* body)
 {
-	struct lusp_vm_bytecode_t* bytecode = create_closure(compiler->env, args, body, compiler->error);
+	struct lusp_vm_bytecode_t* bytecode = create_closure(compiler, args, body);
 	
 	struct lusp_vm_op_t op;
 	
@@ -490,11 +486,9 @@ static void compile(struct compiler_t* compiler, struct lusp_object_t* object)
 
 static void compile_closure_code(struct compiler_t* compiler, struct lusp_object_t* args, struct lusp_object_t* body)
 {
-    DL_ASSERT(compiler->scope == 0);
-    
     // add top-level scope
     struct scope_t scope;
-    scope.parent = 0;
+    scope.parent = compiler->scope;
     scope.bind_count = 0;
 
     compiler->scope = &scope;
@@ -532,15 +526,15 @@ static void compile_closure_code(struct compiler_t* compiler, struct lusp_object
     emit(compiler, op);
 }
 
-static struct lusp_vm_bytecode_t* create_closure(struct lusp_environment_t* env, struct lusp_object_t* args, struct lusp_object_t* body, jmp_buf* error)
+static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* parent, struct lusp_object_t* args, struct lusp_object_t* body)
 {
     // create compiler
     struct compiler_t compiler;
     
-    compiler.env = env;
-    compiler.scope = 0;
+    compiler.env = parent->env;
+    compiler.scope = parent->scope;
     compiler.op_count = 0;
-    compiler.error = error;
+    compiler.error = parent->error;
     
     // compile closure code
     compile_closure_code(&compiler, args, body);
@@ -550,7 +544,7 @@ static struct lusp_vm_bytecode_t* create_closure(struct lusp_environment_t* env,
     memcpy(ops, compiler.ops, compiler.op_count * sizeof(struct lusp_vm_op_t));
 
     struct lusp_vm_bytecode_t* code = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_vm_bytecode_t);
-    code->env = env;
+    code->env = parent->env;
     code->ops = ops;
     code->count = compiler.op_count;
 
@@ -563,7 +557,13 @@ struct lusp_object_t* lusp_compile(struct lusp_environment_t* env, struct lusp_o
 	
 	if (setjmp(buf)) return 0;
 	
-	struct lusp_vm_bytecode_t* bytecode = create_closure(env, 0, object, &buf);
+	struct compiler_t compiler;
+	
+    compiler.env = env;
+    compiler.scope = 0;
+    compiler.error = &buf;
+    
+	struct lusp_vm_bytecode_t* bytecode = create_closure(&compiler, 0, object);
 	
 	return lusp_mkclosure(0, bytecode);
 }
