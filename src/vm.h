@@ -17,6 +17,8 @@ enum lusp_vm_opcode_t
 	LUSP_VMOP_UNBIND,
 	LUSP_VMOP_CALL,
 	LUSP_VMOP_RETURN,
+	LUSP_VMOP_JUMP,
+	LUSP_VMOP_JUMP_IFNOT
 };
 
 struct lusp_vm_op_t
@@ -50,6 +52,11 @@ struct lusp_vm_op_t
 		{
             unsigned int count;
 		} call;
+		
+		struct
+		{
+		    unsigned int index;
+		} jump;
 	};
 };
 

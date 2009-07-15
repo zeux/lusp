@@ -112,7 +112,7 @@ static void compile_selfeval(struct compiler_t* compiler, struct lusp_object_t* 
 	compile_object(compiler, object);
 }
 
-static void compile_symbol(struct compiler_t* compiler, struct lusp_object_t* object)
+static void compile_symbol_getset(struct compiler_t* compiler, struct lusp_object_t* object, bool set)
 {
 	DL_ASSERT(object && object->type == LUSP_OBJECT_SYMBOL);
 	
@@ -122,7 +122,7 @@ static void compile_symbol(struct compiler_t* compiler, struct lusp_object_t* ob
 	{
 		struct lusp_vm_op_t op;
 	
-		op.opcode = LUSP_VMOP_GET_LOCAL;
+		op.opcode = set ? LUSP_VMOP_SET_LOCAL : LUSP_VMOP_GET_LOCAL;
 		op.getset_local.depth = local_depth;
 		op.getset_local.index = local_index;
 		emit(compiler, op);
@@ -131,10 +131,15 @@ static void compile_symbol(struct compiler_t* compiler, struct lusp_object_t* ob
 	{
 		struct lusp_vm_op_t op;
 	
-		op.opcode = LUSP_VMOP_GET_GLOBAL;
+		op.opcode = set ? LUSP_VMOP_SET_GLOBAL : LUSP_VMOP_GET_GLOBAL;
 		op.getset_global.slot = lusp_environment_get_slot(compiler->env, object->symbol.name);
 		emit(compiler, op);
 	}
+}
+
+static void compile_symbol(struct compiler_t* compiler, struct lusp_object_t* object)
+{
+    compile_symbol_getset(compiler, object, false);
 }
 
 static unsigned int compile_list(struct compiler_t* compiler, struct lusp_object_t* object, bool push)
@@ -180,6 +185,67 @@ static void compile_call(struct compiler_t* compiler, struct lusp_object_t* func
 	emit(compiler, op);
 }
 
+static void compile_if(struct compiler_t* compiler, struct lusp_object_t* args)
+{
+	check(compiler, args && args->type == LUSP_OBJECT_CONS, "if: malformed syntax");
+	
+	struct lusp_object_t* car = args->cons.car;
+	struct lusp_object_t* cdr = args->cons.cdr;
+	
+	check(compiler, cdr && cdr->type == LUSP_OBJECT_CONS, "if: malformed syntax");
+	check(compiler, !cdr->cons.cdr || cdr->cons.cdr->cons.cdr == 0, "if: malformed syntax");
+	
+	struct lusp_object_t* cond = car;
+	struct lusp_object_t* ifcode = cdr->cons.car;
+	struct lusp_object_t* elsecode = cdr->cons.cdr ? cdr->cons.cdr->cons.car : 0;
+	
+	// evaluate condition
+	compile(compiler, cond);
+	
+	// jump over if code
+	unsigned int jump_ifnot_op = compiler->op_count;
+	
+	struct lusp_vm_op_t op;
+	
+	op.opcode = LUSP_VMOP_JUMP_IFNOT;
+	op.jump.index = ~0u;
+	emit(compiler, op);
+	
+	// evaluate if code
+	compile(compiler, ifcode);
+	
+	// jump over else code
+	unsigned int jump_op = compiler->op_count;
+	
+	op.opcode = LUSP_VMOP_JUMP;
+	op.jump.index = ~0u;
+	emit(compiler, op);
+	
+	// else code
+	compile(compiler, elsecode);
+	
+	// fixup jumps
+	compiler->ops[jump_ifnot_op].jump.index = jump_op + 1;
+	compiler->ops[jump_op].jump.index = compiler->op_count;
+}
+
+static void compile_set(struct compiler_t* compiler, struct lusp_object_t* args)
+{
+	check(compiler, args && args->type == LUSP_OBJECT_CONS, "set!: malformed syntax");
+	
+	struct lusp_object_t* car = args->cons.car;
+	struct lusp_object_t* cdr = args->cons.cdr;
+	
+	check(compiler, car && car->type == LUSP_OBJECT_SYMBOL, "set!: first argument has to be a symbol");
+	check(compiler, cdr && cdr->type == LUSP_OBJECT_CONS && cdr->cons.cdr == 0, "set!: malformed syntax");
+	
+	// evaluate value
+	compile(compiler, cdr->cons.car);
+	
+	// set value
+    compile_symbol_getset(compiler, car, true);
+}
+
 static void compile_let(struct compiler_t* compiler, struct lusp_object_t* args)
 {
 	check(compiler, args && args->type == LUSP_OBJECT_CONS, "let: malformed syntax");
@@ -197,17 +263,17 @@ static void compile_let(struct compiler_t* compiler, struct lusp_object_t* args)
 	// fill new scope with arguments and compute values
 	for (struct lusp_object_t* vdlist = car; vdlist; vdlist = vdlist->cons.cdr)
 	{
-		check(compiler, vdlist->type == LUSP_OBJECT_CONS, "lambda: malformed syntax");
+		check(compiler, vdlist->type == LUSP_OBJECT_CONS, "let: malformed syntax");
 		
 		struct lusp_object_t* vardecl = vdlist->cons.car;
 		
-		check(compiler, vardecl && vardecl->type == LUSP_OBJECT_CONS, "lambda: malformed syntax");
+		check(compiler, vardecl && vardecl->type == LUSP_OBJECT_CONS, "let: malformed syntax");
 		
 		struct lusp_object_t* var = vardecl->cons.car;
 		struct lusp_object_t* decl = vardecl->cons.cdr;
 		
-		check(compiler, var && var->type == LUSP_OBJECT_SYMBOL, "lambda: malformed syntax");
-		check(compiler, decl && decl->type == LUSP_OBJECT_CONS && decl->cons.cdr == 0, "lambda: malformed syntax");
+		check(compiler, var && var->type == LUSP_OBJECT_SYMBOL, "let: malformed syntax");
+		check(compiler, decl && decl->type == LUSP_OBJECT_CONS && decl->cons.cdr == 0, "let: malformed syntax");
 			
 		// add value to new scope
 		scope.binds[scope.bind_count++].name = var->symbol.name; // $$$: detect duplicates
@@ -314,6 +380,10 @@ static void compile_syntax(struct compiler_t* compiler, struct lusp_object_t* fu
 		compile_lambda(compiler, args);
 	else if (str_is_equal(name, "let"))
 		compile_let(compiler, args);
+	else if (str_is_equal(name, "set!"))
+		compile_set(compiler, args);
+	else if (str_is_equal(name, "if"))
+		compile_if(compiler, args);
 	else
 		compile_call(compiler, func, args);
 }
@@ -390,6 +460,10 @@ static void compile_closure(struct compiler_t* compiler, struct lusp_object_t* a
 
     // compile body
     compile_list(compiler, body, false);
+    
+    // unbind
+    op.opcode = LUSP_VMOP_UNBIND;
+    emit(compiler, op);
 
     // return
     op.opcode = LUSP_VMOP_RETURN;
