@@ -7,6 +7,7 @@
 #include <lusp/vm.h>
 #include <lusp/environment.h>
 #include <lusp/object.h>
+#include <lusp/win/assembler.h>
 
 #include <mem/arena.h>
 
@@ -24,47 +25,6 @@ void* allocate_code()
 	
 	return result;
 }
-
-#define RET() *code++ = 0xc3;
-#define IMM32(value) *(unsigned*)code = (unsigned)(uintptr_t)(value), code += 4
-#define MOV_EAX_IMM32(value) *code++ = 0xb8, IMM32(value)
-#define MOV_ADDR_EAX(addr) *code++ = 0xa3, IMM32(addr)
-#define MOV_EAX_ADDR(addr) *code++ = 0xa1, IMM32(addr)
-#define MOV_ECX_ADDR(addr) *code++ = 0x3e, *code++ = 0x8b, *code++ = 0x0d, IMM32(addr)
-#define ADD_ADDR_IMM32(addr, value) *code++ = 0x3e, *code++ = 0x81, *code++ = 0x05, IMM32(addr), IMM32(value)
-#define MOV_PECX_EBX() *code++ = 0x89, *code++ = 0x19
-#define MOV_EBX_ECX() *code++ = 0x8b, *code++ = 0xd9
-#define MOV_EBX_PEBX() *code++ = 0x8b, *code++ = 0x1b
-#define MOV_EAX_PEBX_OFF32(offset) *code++ = 0x8b, *code++ = 0x83, IMM32(offset)
-#define MOV_PEBX_OFF32_EAX(offset) *code++ = 0x89, *code++ = 0x83, IMM32(offset)
-#define MOV_ECX_PEBX() *code++ = 0x8b, *code++ = 0x0b
-#define MOV_ECX_PECX() *code++ = 0x8b, *code++ = 0x09
-#define MOV_EAX_PECX_OFF32(offset) *code++ = 0x8b, *code++ = 0x81, IMM32(offset)
-#define MOV_PECX_OFF32_EAX(offset) *code++ = 0x89, *code++ = 0x81, IMM32(offset)
-#define JMP_IMM32(offset) *code++ = 0xe9, IMM32(offset)
-#define TEST_EAX_EAX() *code++ = 0x85, *code++ = 0xc0
-#define JZ_IMM8(offset) *code++ = 0x74, *code++ = offset
-#define CMP_PEAX_IMM8(value) *code++ = 0x83, *code++ = 0x38, *code++ = value
-#define CMP_PEAX_OFF8_IMM8(offset, value) *code++ = 0x83, *code++ = 0x78, *code++ = offset, *code++ = value
-#define JNE_IMM8(offset) *code++ = 0x75, *code++ = offset
-#define JE_IMM32(offset) *code++ = 0x0f, *code++ = 0x84, IMM32(offset)
-#define MOV_PEAX_IMM32(value) *code++ = 0xc7, *code++ = 0x00, IMM32(value)
-#define MOV_PEAX_OFF8_EBX(offset) *code++ = 0x89, *code++ = 0x58, *code++ = offset
-#define MOV_PEAX_OFF8_IMM32(offset, value) *code++ = 0xc7, *code++ = 0x40, *code++ = offset, IMM32(value)
-#define PUSH_IMM32(value) *code++ = 0x68, IMM32(value)
-#define MOV_EAX_PEAX_OFF8(offset) *code++ = 0x8b, *code++ = 0x40, *code++ = offset
-#define CALL_EAX() *code++ = 0xff, *code++ = 0xd0
-#define PUSH_EBX() *code++ = 0x53
-#define MOV_EBX_PEAX_OFF8(offset) *code++ = 0x8b, *code++ = 0x58, *code++ = offset
-#define POP_EBX() *code++ = 0x5b
-#define MOV_PEDX_EAX() *code++ = 0x89, *code++ = 0x02
-#define ADD_EDX_IMM8(value) *code++ = 0x83, *code++ = 0xc2, *code++ = value
-#define MOV_ESI_PEDX_OFF32(offset) *code++ = 0x8b, *code++ = 0xb2, IMM32(offset)
-#define MOV_PECX_OFF32_ESI(offset) *code++ = 0x89, *code++ = 0xb1, IMM32(offset)
-#define SUB_EDX_IMM32(value) *code++ = 0x81, *code++ = 0xea, IMM32(value)
-#define PUSH_EDX() *code++ = 0x52
-#define POP_EDX() *code++ = 0x5a
-#define POP_ECX() *code++ = 0x59
 
 void compile(unsigned char* code, struct lusp_environment_t* env, struct lusp_vm_op_t* ops, unsigned int count)
 {
