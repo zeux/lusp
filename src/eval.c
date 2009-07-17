@@ -27,13 +27,13 @@ static inline struct lusp_vm_bind_frame_t* create_frame_impl(struct lusp_vm_bind
 {
     DL_ASSERT(count >= copy_count);
     
-    struct lusp_vm_bind_frame_t* result = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_vm_bind_frame_t);
+    struct lusp_vm_bind_frame_t* result = (struct lusp_vm_bind_frame_t*)mem_arena_allocate(&g_lusp_heap,
+		offsetof(struct lusp_vm_bind_frame_t, binds) + count * sizeof(struct lusp_object_t*),
+		alignof(struct lusp_vm_bind_frame_t));
     DL_ASSERT(result);
     
     result->parent = parent;
     result->count = count;
-    result->binds = MEM_ARENA_NEW_ARRAY(&g_lusp_heap, struct lusp_object_t*, count);
-    DL_ASSERT(result->binds);
     
     memcpy(result->binds, values, copy_count * sizeof(struct lusp_object_t*));
     

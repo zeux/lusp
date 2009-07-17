@@ -73,8 +73,8 @@ struct lusp_vm_bind_frame_t
 {
 	struct lusp_vm_bind_frame_t* parent;
 	
-	struct lusp_object_t** binds;
 	unsigned int count;
+	struct lusp_object_t* binds[1];
 };
 
 struct lusp_vm_bytecode_t

@@ -44,7 +44,7 @@ static inline uint8_t* compile_get_object(uint8_t* code, struct lusp_vm_op_t op)
 static inline uint8_t* compile_getset_local(uint8_t* code, struct lusp_vm_op_t op)
 {
 	unsigned int offset = op.getset_local.index * sizeof(struct lusp_object_t*) +
-		offsetof(struct lusp_vm_bind_frame_t, binds); // $$$ this is cheating, fix bind_frame
+		offsetof(struct lusp_vm_bind_frame_t, binds);
 			
 	if (op.getset_local.depth == 0)
 	{
@@ -100,13 +100,16 @@ static inline uint8_t* compile_bind(uint8_t* code, struct lusp_vm_op_t op)
 	// mov ecx, heap.current
 	MOV_ECX_ADDR(&g_lusp_heap.current);
 
-	// add heap.current, bind_size + sizeof(struct lusp_vm_bind_frame_t)
-	ADD_ADDR_IMM32(&g_lusp_heap.current, bind_size + 4); // $$$ this is cheating, fix bind_frame
+	// add heap.current, bind_size + offsetof(struct lusp_vm_bind_frame_t, binds)
+	ADD_ADDR_IMM32(&g_lusp_heap.current, bind_size + offsetof(struct lusp_vm_bind_frame_t, binds));
 
 	// mov dword ptr [ecx], ebx
 	DL_STATIC_ASSERT(offsetof(struct lusp_vm_bind_frame_t, parent) == 0);
 	MOV_PECX_EBX();
-
+	
+	// mov dword ptr [ecx + offset], op.bind.count
+	MOV_PECX_OFF8_IMM32(offsetof(struct lusp_vm_bind_frame_t, count), op.bind.count);
+	
 	// sub edx, bind_size
 	SUB_EDX_IMM32(bind_size);
 
@@ -115,7 +118,6 @@ static inline uint8_t* compile_bind(uint8_t* code, struct lusp_vm_op_t op)
 	for (unsigned int j = 0; j < op.bind.count; ++j)
 	{
 		MOV_ESI_PEDX_OFF32(j * sizeof(struct lusp_object_t*));
-		// $$$ this is cheating, fix bind_frame
 		MOV_PECX_OFF32_ESI(j * sizeof(struct lusp_object_t*) + offsetof(struct lusp_vm_bind_frame_t, binds));
 	}
 

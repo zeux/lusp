@@ -37,6 +37,7 @@
 #define MOV_PEAX_OFF8_EBX(offset) EMIT8(0x89), EMIT8(0x58), EMIT8(offset)
 
 #define MOV_PEAX_OFF8_IMM32(offset, value) EMIT8(0xc7), EMIT8(0x40), EMIT8(offset), EMIT32(value)
+#define MOV_PECX_OFF8_IMM32(offset, value) EMIT8(0xc7), EMIT8(0x41), EMIT8(offset), EMIT32(value)
 
 #define MOV_EAX_PEAX_OFF8(offset) EMIT8(0x8b), EMIT8(0x40), EMIT8(offset)
 #define MOV_EBX_PEAX_OFF8(offset) EMIT8(0x8b), EMIT8(0x58), EMIT8(offset)
