@@ -45,10 +45,12 @@
 
 #define JE_IMM32(offset) EMIT8(0x0f), EMIT8(0x84), EMIT32(offset)
 
+#define JMP_IMM8(label) EMIT8(0xeb), label = CODE(), EMIT8(0)
 #define JZ_IMM8(label) EMIT8(0x74), label = CODE(), EMIT8(0)
 #define JNE_IMM8(label) EMIT8(0x75), label = CODE(), EMIT8(0)
 
-#define LABEL(label) *(uint8_t*)label = (uint8_t)(uintptr_t)(CODE() - label - 1)
+#define LABEL8(label) *(uint8_t*)label = (uint8_t)(uintptr_t)(CODE() - label - 1)
+#define LABEL32(label, code) *(uint32_t*)label = (uint32_t)(uintptr_t)(code - label - 4)
 
 #define TEST_EAX_EAX() EMIT8(0x85), EMIT8(0xc0)
 

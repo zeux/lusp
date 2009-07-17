@@ -43,15 +43,19 @@ static inline uint8_t* compile_get_object(uint8_t* code, struct lusp_vm_op_t op)
 
 static inline uint8_t* compile_getset_local(uint8_t* code, struct lusp_vm_op_t op)
 {
+	unsigned int offset = op.getset_local.index * sizeof(struct lusp_object_t*) +
+		offsetof(struct lusp_vm_bind_frame_t, binds); // $$$ this is cheating, fix bind_frame
+			
 	if (op.getset_local.depth == 0)
 	{
 		// mov eax, dword ptr [ebx + offset]
 		// mov dword ptr [ebx + offset], eax
-		unsigned int offset = op.getset_local.index * 4 + 4;
 		(op.opcode == LUSP_VMOP_GET_LOCAL) ? (MOV_EAX_PEBX_OFF32(offset)) : (MOV_PEBX_OFF32_EAX(offset));
 	}
 	else
 	{
+		DL_STATIC_ASSERT(offsetof(struct lusp_vm_bind_frame_t, parent) == 0);
+		
 		// mov ecx, dword ptr [ebx]
 		MOV_ECX_PEBX();
 
@@ -60,7 +64,6 @@ static inline uint8_t* compile_getset_local(uint8_t* code, struct lusp_vm_op_t o
 
 		// mov eax, dword ptr [ecx + offset]
 		// mov dword ptr [ecx + offset], eax
-		unsigned int offset = op.getset_local.index * 4 + 4;
 		(op.opcode == LUSP_VMOP_GET_LOCAL) ? (MOV_EAX_PECX_OFF32(offset)) : (MOV_PECX_OFF32_EAX(offset));
 	}
 	
@@ -84,32 +87,36 @@ static inline uint8_t* compile_push(uint8_t* code, struct lusp_vm_op_t op)
 	// mov dword ptr [edx], eax
 	MOV_PEDX_EAX();
 
-	// add edx, 4
-	ADD_EDX_IMM8(4);
+	// add edx, sizeof(struct lusp_object_t*)
+	ADD_EDX_IMM8(sizeof(struct lusp_object_t*));
 	
 	return code;
 }
 
 static inline uint8_t* compile_bind(uint8_t* code, struct lusp_vm_op_t op)
 {
+	unsigned int bind_size = op.bind.count * sizeof(struct lusp_object_t*);
+	
 	// mov ecx, heap.current
 	MOV_ECX_ADDR(&g_lusp_heap.current);
 
-	// add heap.current, 4 + count * 4
-	ADD_ADDR_IMM32(&g_lusp_heap.current, 4 + op.bind.count * 4);
+	// add heap.current, bind_size + sizeof(struct lusp_vm_bind_frame_t)
+	ADD_ADDR_IMM32(&g_lusp_heap.current, bind_size + 4); // $$$ this is cheating, fix bind_frame
 
 	// mov dword ptr [ecx], ebx
+	DL_STATIC_ASSERT(offsetof(struct lusp_vm_bind_frame_t, parent) == 0);
 	MOV_PECX_EBX();
 
-	// sub edx, count * 4
-	SUB_EDX_IMM32(op.bind.count * 4);
+	// sub edx, bind_size
+	SUB_EDX_IMM32(bind_size);
 
 	// mov esi, dword ptr [edx + offset]
 	// mov dword ptr [ecx + offset], esi
 	for (unsigned int j = 0; j < op.bind.count; ++j)
 	{
-		MOV_ESI_PEDX_OFF32(j * 4);
-		MOV_PECX_OFF32_ESI(j * 4 + 4);
+		MOV_ESI_PEDX_OFF32(j * sizeof(struct lusp_object_t*));
+		// $$$ this is cheating, fix bind_frame
+		MOV_PECX_OFF32_ESI(j * sizeof(struct lusp_object_t*) + offsetof(struct lusp_vm_bind_frame_t, binds));
 	}
 
 	// mov ebx, ecx
@@ -123,6 +130,7 @@ static inline uint8_t* compile_unbind(uint8_t* code, struct lusp_vm_op_t op)
 	(void)op;
 	
 	// mov ebx, dword ptr [ebx]
+	DL_STATIC_ASSERT(offsetof(struct lusp_vm_bind_frame_t, parent) == 0);
 	MOV_EBX_PEBX();
 	
 	return code;
@@ -131,6 +139,7 @@ static inline uint8_t* compile_unbind(uint8_t* code, struct lusp_vm_op_t op)
 static inline uint8_t* compile_call(uint8_t* code, struct lusp_vm_op_t op, struct lusp_environment_t* env)
 {
 	// cmp dword ptr [eax], LUSP_OBJECT_PROCEDURE
+	DL_STATIC_ASSERT(offsetof(struct lusp_object_t, type) == 0);
 	CMP_PEAX_IMM8(LUSP_OBJECT_PROCEDURE);
 
 	// jne closure
@@ -140,8 +149,8 @@ static inline uint8_t* compile_call(uint8_t* code, struct lusp_vm_op_t op, struc
 	// push count
 	PUSH_IMM32(op.call.count);
 
-	// sub edx, count * 4
-	SUB_EDX_IMM32(op.call.count * 4);
+	// sub edx, count * sizeof(struct lusp_object_t*)
+	SUB_EDX_IMM32(op.call.count * sizeof(struct lusp_object_t*));
 
 	// push edx
 	PUSH_EDX();
@@ -149,8 +158,8 @@ static inline uint8_t* compile_call(uint8_t* code, struct lusp_vm_op_t op, struc
 	// push env
 	PUSH_IMM32(env);
 
-	// mov eax, dword ptr [eax + 4]
-	MOV_EAX_PEAX_OFF8(4);
+	// mov eax, dword ptr [eax + offset]
+	MOV_EAX_PEAX_OFF8(offsetof(struct lusp_object_t, procedure.code));
 
 	// call eax
 	CALL_EAX();
@@ -165,22 +174,23 @@ static inline uint8_t* compile_call(uint8_t* code, struct lusp_vm_op_t op, struc
 	POP_ECX();
 
 	// jmp end
-	JMP_IMM32(13);
+	uint8_t* end;
+	JMP_IMM8(end);
 
 	// closure:
-	LABEL(closure);
+	LABEL8(closure);
 	
 	// push ebx
 	PUSH_EBX();
 
-	// mov ebx, dword ptr [eax + 4]
-	MOV_EBX_PEAX_OFF8(4);
+	// mov ebx, dword ptr [eax + offset]
+	MOV_EBX_PEAX_OFF8(offsetof(struct lusp_object_t, closure.frame));
 
-	// mov eax, dword ptr [eax + 8]
-	MOV_EAX_PEAX_OFF8(8);
+	// mov eax, dword ptr [eax + offset]
+	MOV_EAX_PEAX_OFF8(offsetof(struct lusp_object_t, closure.code));
 
-	// mov eax, dword ptr [eax + 12]
-	MOV_EAX_PEAX_OFF8(12);
+	// mov eax, dword ptr [eax + offset]
+	MOV_EAX_PEAX_OFF8(offsetof(struct lusp_vm_bytecode_t, jit));
 
 	// call eax
 	CALL_EAX();
@@ -189,6 +199,8 @@ static inline uint8_t* compile_call(uint8_t* code, struct lusp_vm_op_t op, struc
 	POP_EBX();
 
 	// end:
+	LABEL8(end);
+	
 	return code;
 }
 
@@ -224,21 +236,22 @@ static inline uint8_t* compile_jump_ifnot(uint8_t* code, struct lusp_vm_op_t op)
 	JZ_IMM8(skip1);
 
 	// cmp dword ptr [eax], LUSP_OBJECT_BOOLEAN
+	DL_STATIC_ASSERT(offsetof(struct lusp_object_t, type) == 0);
 	CMP_PEAX_IMM8(LUSP_OBJECT_BOOLEAN);
 
 	// jne skip
 	uint8_t* skip2;
 	JNE_IMM8(skip2);
 
-	// cmp dword ptr [eax + 4], false
-	CMP_PEAX_OFF8_IMM8(4, 0);
+	// cmp dword ptr [eax + offset], false
+	CMP_PEAX_OFF8_IMM8(offsetof(struct lusp_object_t, boolean.value), 0);
 
 	// je label
 	JE_IMM32(0);
 
 	// skip:
-	LABEL(skip1);
-	LABEL(skip2);
+	LABEL8(skip1);
+	LABEL8(skip2);
 	
 	return code;
 }
@@ -252,13 +265,14 @@ static inline uint8_t* compile_create_closure(uint8_t* code, struct lusp_vm_op_t
 	ADD_ADDR_IMM32(&g_lusp_heap.current, sizeof(struct lusp_object_t));
 
 	// mov dword ptr [eax], LUSP_OBJECT_CLOSURE
+	DL_ASSERT(offsetof(struct lusp_object_t, type) == 0);
 	MOV_PEAX_IMM32(LUSP_OBJECT_CLOSURE);
 
-	// mov dword ptr [eax + 4], ebx
-	MOV_PEAX_OFF8_EBX(4);
+	// mov dword ptr [eax + offset], ebx
+	MOV_PEAX_OFF8_EBX(offsetof(struct lusp_object_t, closure.frame));
 
-	// mov dword ptr [eax + 8], op.create_closure.code
-	MOV_PEAX_OFF8_IMM32(8, op.create_closure.code);
+	// mov dword ptr [eax + offset], op.create_closure.code
+	MOV_PEAX_OFF8_IMM32(offsetof(struct lusp_object_t, closure.code), op.create_closure.code);
 
 	// compile bytecode recursively
 	lusp_compile_jit(op.create_closure.code);
@@ -266,10 +280,10 @@ static inline uint8_t* compile_create_closure(uint8_t* code, struct lusp_vm_op_t
 	return code;
 }
 
-void compile(unsigned char* code, struct lusp_environment_t* env, struct lusp_vm_op_t* ops, unsigned int count)
+static void compile(uint8_t* code, struct lusp_environment_t* env, struct lusp_vm_op_t* ops, unsigned int count)
 {
-	unsigned char* labels[1024];
-	unsigned char* jumps[1024];
+	uint8_t* labels[1024];
+	uint8_t* jumps[1024];
 	
 	// first pass: compile code
 	for (unsigned int i = 0; i < count; ++i)
@@ -322,12 +336,12 @@ void compile(unsigned char* code, struct lusp_environment_t* env, struct lusp_vm
 			
 		case LUSP_VMOP_JUMP:
 			code = compile_jump(code, op);
-			jumps[i] = code - 4;
+			jumps[i] = code - sizeof(uint32_t);
 			break;
 			
 		case LUSP_VMOP_JUMP_IFNOT:
 			code = compile_jump_ifnot(code, op);
-			jumps[i] = code - 4;
+			jumps[i] = code - sizeof(uint32_t);
 			break;
 			
 		case LUSP_VMOP_CREATE_CLOSURE:
@@ -346,7 +360,7 @@ void compile(unsigned char* code, struct lusp_environment_t* env, struct lusp_vm
 		
 		if (op.opcode != LUSP_VMOP_JUMP && op.opcode != LUSP_VMOP_JUMP_IFNOT) continue;
 		
-		*(int*)jumps[i] = (int)(labels[op.jump.index] - jumps[i]) - 4;
+		LABEL32(jumps[i], labels[op.jump.index]);
 	}
 }
 
