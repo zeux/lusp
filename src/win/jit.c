@@ -36,7 +36,7 @@ void* allocate_code()
 static inline uint8_t* compile_get_object(uint8_t* code, struct lusp_vm_op_t op)
 {
 	// mov eax, imm32
-	MOV_EAX_IMM32(op.get_object.object);
+	MOV_REG_IMM32(EAX, op.get_object.object);
 	
 	return code;
 }
@@ -50,21 +50,21 @@ static inline uint8_t* compile_getset_local(uint8_t* code, struct lusp_vm_op_t o
 	{
 		// mov eax, dword ptr [ebx + offset]
 		// mov dword ptr [ebx + offset], eax
-		(op.opcode == LUSP_VMOP_GET_LOCAL) ? (MOV_EAX_PEBX_OFF32(offset)) : (MOV_PEBX_OFF32_EAX(offset));
+		(op.opcode == LUSP_VMOP_GET_LOCAL) ? (MOV_REG_PREG_OFF32(EAX, EBX, offset)) : (MOV_PREG_OFF32_REG(EBX, offset, EAX));
 	}
 	else
 	{
 		DL_STATIC_ASSERT(offsetof(struct lusp_vm_bind_frame_t, parent) == 0);
 		
 		// mov ecx, dword ptr [ebx]
-		MOV_ECX_PEBX();
+		MOV_REG_PREG(ECX, EBX);
 
 		// mov ecx, dword ptr [ecx]
-		for (unsigned int i = 1; i < op.getset_local.depth; ++i) MOV_ECX_PECX();
+		for (unsigned int i = 1; i < op.getset_local.depth; ++i) MOV_REG_PREG(ECX, ECX);
 
 		// mov eax, dword ptr [ecx + offset]
 		// mov dword ptr [ecx + offset], eax
-		(op.opcode == LUSP_VMOP_GET_LOCAL) ? (MOV_EAX_PECX_OFF32(offset)) : (MOV_PECX_OFF32_EAX(offset));
+		(op.opcode == LUSP_VMOP_GET_LOCAL) ? (MOV_REG_PREG_OFF32(EAX, ECX, offset)) : (MOV_PREG_OFF32_REG(ECX, offset, EAX));
 	}
 	
 	return code;
@@ -85,7 +85,7 @@ static inline uint8_t* compile_push(uint8_t* code, struct lusp_vm_op_t op)
 	(void)op;
 	
 	// mov dword ptr [edx], eax
-	MOV_PEDX_EAX();
+	MOV_PREG_REG(EDX, EAX);
 
 	// add edx, sizeof(struct lusp_object_t*)
 	ADD_EDX_IMM8(sizeof(struct lusp_object_t*));
@@ -105,10 +105,10 @@ static inline uint8_t* compile_bind(uint8_t* code, struct lusp_vm_op_t op)
 
 	// mov dword ptr [ecx], ebx
 	DL_STATIC_ASSERT(offsetof(struct lusp_vm_bind_frame_t, parent) == 0);
-	MOV_PECX_EBX();
+	MOV_PREG_REG(ECX, EBX);
 	
 	// mov dword ptr [ecx + offset], op.bind.count
-	MOV_PECX_OFF8_IMM32(offsetof(struct lusp_vm_bind_frame_t, count), op.bind.count);
+	MOV_PREG_OFF8_IMM32(ECX, offsetof(struct lusp_vm_bind_frame_t, count), op.bind.count);
 	
 	// sub edx, bind_size
 	SUB_EDX_IMM32(bind_size);
@@ -117,12 +117,12 @@ static inline uint8_t* compile_bind(uint8_t* code, struct lusp_vm_op_t op)
 	// mov dword ptr [ecx + offset], esi
 	for (unsigned int j = 0; j < op.bind.count; ++j)
 	{
-		MOV_ESI_PEDX_OFF32(j * sizeof(struct lusp_object_t*));
-		MOV_PECX_OFF32_ESI(j * sizeof(struct lusp_object_t*) + offsetof(struct lusp_vm_bind_frame_t, binds));
+		MOV_REG_PREG_OFF32(ESI, EDX, j * sizeof(struct lusp_object_t*));
+		MOV_PREG_OFF32_REG(ECX, j * sizeof(struct lusp_object_t*) + offsetof(struct lusp_vm_bind_frame_t, binds), ESI);
 	}
 
 	// mov ebx, ecx
-	MOV_EBX_ECX();
+	MOV_REG_REG(EBX, ECX);
 	
 	return code;
 }
@@ -133,7 +133,7 @@ static inline uint8_t* compile_unbind(uint8_t* code, struct lusp_vm_op_t op)
 	
 	// mov ebx, dword ptr [ebx]
 	DL_STATIC_ASSERT(offsetof(struct lusp_vm_bind_frame_t, parent) == 0);
-	MOV_EBX_PEBX();
+	MOV_REG_PREG(EBX, EBX);
 	
 	return code;
 }
@@ -155,25 +155,25 @@ static inline uint8_t* compile_call(uint8_t* code, struct lusp_vm_op_t op, struc
 	SUB_EDX_IMM32(op.call.count * sizeof(struct lusp_object_t*));
 
 	// push edx
-	PUSH_EDX();
+	PUSH_REG(EDX);
 
 	// push env
 	PUSH_IMM32(env);
 
 	// mov eax, dword ptr [eax + offset]
-	MOV_EAX_PEAX_OFF8(offsetof(struct lusp_object_t, procedure.code));
+	MOV_REG_PREG_OFF8(EAX, EAX, offsetof(struct lusp_object_t, procedure.code));
 
 	// call eax
-	CALL_EAX();
+	CALL_REG(EAX);
 
 	// pop edx
-	POP_EDX();
+	POP_REG(EDX);
 
 	// pop edx
-	POP_EDX();
+	POP_REG(EDX);
 
 	// pop ecx
-	POP_ECX();
+	POP_REG(ECX);
 
 	// jmp end
 	uint8_t* end;
@@ -183,22 +183,22 @@ static inline uint8_t* compile_call(uint8_t* code, struct lusp_vm_op_t op, struc
 	LABEL8(closure);
 	
 	// push ebx
-	PUSH_EBX();
+	PUSH_REG(EBX);
 
 	// mov ebx, dword ptr [eax + offset]
-	MOV_EBX_PEAX_OFF8(offsetof(struct lusp_object_t, closure.frame));
+	MOV_REG_PREG_OFF8(EBX, EAX, offsetof(struct lusp_object_t, closure.frame));
 
 	// mov eax, dword ptr [eax + offset]
-	MOV_EAX_PEAX_OFF8(offsetof(struct lusp_object_t, closure.code));
+	MOV_REG_PREG_OFF8(EAX, EAX, offsetof(struct lusp_object_t, closure.code));
 
 	// mov eax, dword ptr [eax + offset]
-	MOV_EAX_PEAX_OFF8(offsetof(struct lusp_vm_bytecode_t, jit));
+	MOV_REG_PREG_OFF8(EAX, EAX, offsetof(struct lusp_vm_bytecode_t, jit));
 
 	// call eax
-	CALL_EAX();
+	CALL_REG(EAX);
 
 	// pop ebx
-	POP_EBX();
+	POP_REG(EBX);
 
 	// end:
 	LABEL8(end);
@@ -271,10 +271,10 @@ static inline uint8_t* compile_create_closure(uint8_t* code, struct lusp_vm_op_t
 	MOV_PEAX_IMM32(LUSP_OBJECT_CLOSURE);
 
 	// mov dword ptr [eax + offset], ebx
-	MOV_PEAX_OFF8_EBX(offsetof(struct lusp_object_t, closure.frame));
+	MOV_PREG_OFF8_REG(EAX, offsetof(struct lusp_object_t, closure.frame), EBX);
 
 	// mov dword ptr [eax + offset], op.create_closure.code
-	MOV_PEAX_OFF8_IMM32(offsetof(struct lusp_object_t, closure.code), op.create_closure.code);
+	MOV_PREG_OFF8_IMM32(EAX, offsetof(struct lusp_object_t, closure.code), op.create_closure.code);
 
 	// compile bytecode recursively
 	lusp_compile_jit(op.create_closure.code);
