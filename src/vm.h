@@ -78,6 +78,10 @@ struct lusp_vm_bind_frame_t
 	struct lusp_object_t* binds[1];
 };
 
+struct lusp_vm_bytecode_t;
+
+typedef struct lusp_object_t* (*lusp_vm_evaluator_t)(struct lusp_vm_bytecode_t* code, struct lusp_vm_bind_frame_t* bind_frame, struct lusp_object_t** eval_stack, unsigned int arg_count);
+
 struct lusp_vm_bytecode_t
 {
     struct lusp_environment_t* env;
@@ -86,6 +90,8 @@ struct lusp_vm_bytecode_t
 	unsigned int count;
 
 	void* jit;
+	
+	lusp_vm_evaluator_t evaluator;
 };
 
 void lusp_dump_bytecode(struct lusp_vm_bytecode_t* code, bool deep);

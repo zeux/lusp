@@ -16,15 +16,6 @@ extern struct mem_arena_t g_lusp_heap;
 
 extern struct lusp_object_t g_lusp_false;
 
-struct continuation_t
-{
-    struct lusp_vm_bind_frame_t* bind_frame;
-    
-    // caller code
-    struct lusp_vm_bytecode_t* code;
-    unsigned int pc;
-};
-
 static inline struct lusp_vm_bind_frame_t* create_frame_impl(struct lusp_vm_bind_frame_t* parent, struct lusp_object_t** values, unsigned int count, unsigned int copy_count)
 {
     DL_ASSERT(count >= copy_count);
@@ -76,22 +67,10 @@ static inline struct lusp_vm_bind_frame_t* get_frame(struct lusp_vm_bind_frame_t
     return top;
 }
 
-static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* bytecode)
+static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_vm_bind_frame_t* bind_frame, struct lusp_object_t** eval_stack, unsigned int arg_count)
 {
-    struct continuation_t continuation_stack[1024];
-    unsigned int continuation_stack_top = 0;
-    
-    struct lusp_object_t* eval_stack[1024];
-    unsigned int eval_stack_top = 0;
-    
-    struct lusp_vm_bind_frame_t* bind_frame = 0;
-    
     struct lusp_object_t* value = 0;
-    
-    struct lusp_vm_bytecode_t* code = bytecode;
     unsigned int pc = 0;
-    
-    unsigned int call_count = 0;
     
     for (;;)
     {
@@ -126,20 +105,18 @@ static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* bytecode)
             break;
             
         case LUSP_VMOP_PUSH:
-            DL_ASSERT(eval_stack_top < sizeof(eval_stack) / sizeof(eval_stack[0]));
-            eval_stack[eval_stack_top++] = value;
+            *eval_stack++ = value;
             break;
             
         case LUSP_VMOP_BIND:
-            DL_ASSERT(eval_stack_top >= op->bind.count);
-            bind_frame = create_frame(bind_frame, eval_stack + eval_stack_top - op->bind.count, op->bind.count);
-            eval_stack_top -= op->bind.count;
+            eval_stack -= op->bind.count;
+            bind_frame = create_frame(bind_frame, eval_stack, op->bind.count);
             break;
             
         case LUSP_VMOP_BIND_REST:
-            DL_ASSERT(eval_stack_top >= op->bind.count && call_count >= op->bind.count);
-            bind_frame = create_frame_rest(bind_frame, eval_stack + eval_stack_top - call_count, op->bind.count, call_count - op->bind.count);
-            eval_stack_top -= call_count;
+            DL_ASSERT(arg_count >= op->bind.count);
+            eval_stack -= arg_count;
+            bind_frame = create_frame_rest(bind_frame, eval_stack, op->bind.count, arg_count - op->bind.count);
             break;
             
         case LUSP_VMOP_UNBIND:
@@ -148,46 +125,26 @@ static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* bytecode)
             break;
             
         case LUSP_VMOP_CALL:
-            DL_ASSERT(eval_stack_top >= op->call.count);
             DL_ASSERT(value && (value->type == LUSP_OBJECT_CLOSURE || value->type == LUSP_OBJECT_PROCEDURE));
             
             if (value->type == LUSP_OBJECT_CLOSURE)
             {
-                // push continuation
-                DL_ASSERT(continuation_stack_top < sizeof(continuation_stack) / sizeof(continuation_stack[0]));
-                continuation_stack[continuation_stack_top].bind_frame = bind_frame;
-                continuation_stack[continuation_stack_top].code = code;
-                continuation_stack[continuation_stack_top].pc = pc;
-                continuation_stack_top++;
+                unsigned int count = op->call.count;
                 
-                // call
-                bind_frame = value->closure.frame;
-                code = value->closure.code;
-                pc = 0;
-                call_count = op->call.count;
+				value = value->closure.code->evaluator(value->closure.code, value->closure.frame, eval_stack, count);
+                eval_stack -= count;
             }
             else
             {
                 unsigned int count = op->call.count;
                 
-                value = (value->procedure.code)(code->env, eval_stack + eval_stack_top - count, count);
-                eval_stack_top -= count;
+                eval_stack -= count;
+                value = (value->procedure.code)(code->env, eval_stack, count);
             }
             break;
             
         case LUSP_VMOP_RETURN:
-            if (continuation_stack_top == 0)
-            {
-                // top-level return
-                DL_ASSERT(eval_stack_top == 0 && bind_frame == 0);
-                return value;
-            }
-            
-            continuation_stack_top--;
-            bind_frame = continuation_stack[continuation_stack_top].bind_frame;
-            code = continuation_stack[continuation_stack_top].code;
-            pc = continuation_stack[continuation_stack_top].pc;
-            break;
+            return value;
             
         case LUSP_VMOP_JUMP:
             pc = op->jump.index;
@@ -212,11 +169,14 @@ struct lusp_object_t* lusp_eval(struct lusp_object_t* object)
 {
 	if (!object || object->type != LUSP_OBJECT_CLOSURE) return 0;
 	
+	struct lusp_object_t* eval_stack[1024];
+	
 	struct lusp_vm_bytecode_t* code = object->closure.code;
 	
-	if (!code->jit) lusp_compile_jit(code);
-	
-	return lusp_eval_jit(code);
-	
-    return eval(code);
+    return code->evaluator(code, 0, eval_stack, 0);
+}
+
+void lusp_bytecode_setup(struct lusp_vm_bytecode_t* code)
+{
+	code->evaluator = eval;
 }
