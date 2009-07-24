@@ -26,10 +26,12 @@
 #define MOV_REG_PREG_OFF8(reg1, reg2, offset) EMIT8(0x8b), EMIT8(0x40 + (reg1 << 3) + reg2), EMIT8(offset)
 #define MOV_REG_PREG_OFF32(reg1, reg2, offset) EMIT8(0x8b), EMIT8(0x80 + (reg1 << 3) + reg2), EMIT32(offset)
 #define MOV_PREG_OFF8_IMM32(reg, offset, value) EMIT8(0xc7), EMIT8(0x40 + reg), EMIT8(offset), EMIT32(value)
+#define MOV_REG_PESP_OFF8(reg, offset) EMIT8(0x8b), EMIT8(0x40 + (reg << 3) + ESP), EMIT8(0x24), EMIT8(offset)
 
 #define PUSH_IMM8(value) EMIT8(0x6a), EMIT8(value)
 #define PUSH_IMM32(value) EMIT8(0x68), EMIT32(value)
 #define PUSH_REG(reg) EMIT8(0x50 + reg)
+#define PUSH_PREG_OFF8(reg, offset) EMIT8(0xff), EMIT8(0x70 + reg), EMIT8(offset)
 #define POP_REG(reg) EMIT8(0x58 + reg)
 
 #define MOV_ADDR_EAX(addr) EMIT8(0xa3), EMIT32(addr)
