@@ -185,6 +185,37 @@ static void compile_call(struct compiler_t* compiler, struct lusp_object_t* func
 	emit(compiler, op);
 }
 
+static void compile_whenunless(struct compiler_t* compiler, struct lusp_object_t* args, bool unless)
+{
+	check(compiler, args && args->type == LUSP_OBJECT_CONS, "when/unless: malformed syntax");
+	
+	struct lusp_object_t* car = args->cons.car;
+	struct lusp_object_t* cdr = args->cons.cdr;
+	
+	check(compiler, cdr && cdr->type == LUSP_OBJECT_CONS, "when/unless: malformed syntax");
+	
+	struct lusp_object_t* cond = car;
+	struct lusp_object_t* code = cdr;
+	
+	// evaluate condition
+	compile(compiler, cond);
+	
+	// jump over code
+	unsigned int jump_op = compiler->op_count;
+
+	struct lusp_vm_op_t op;
+
+	op.opcode = unless ? LUSP_VMOP_JUMP_IF : LUSP_VMOP_JUMP_IFNOT;
+	op.jump.index = ~0u;
+	emit(compiler, op);
+
+	// evaluate code
+	compile_list(compiler, code, false);
+
+	// fixup jump
+	compiler->ops[jump_op].jump.index = compiler->op_count;
+}
+
 static void compile_if(struct compiler_t* compiler, struct lusp_object_t* args)
 {
 	check(compiler, args && args->type == LUSP_OBJECT_CONS, "if: malformed syntax");
@@ -442,6 +473,10 @@ static void compile_syntax(struct compiler_t* compiler, struct lusp_object_t* fu
 		compile_set(compiler, args);
 	else if (str_is_equal(name, "if"))
 		compile_if(compiler, args);
+	else if (str_is_equal(name, "when"))
+		compile_whenunless(compiler, args, false);
+	else if (str_is_equal(name, "unless"))
+		compile_whenunless(compiler, args, true);
 	else
 		compile_call(compiler, func, args);
 }
