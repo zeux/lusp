@@ -37,7 +37,7 @@ static inline bool is_whitespace(char data)
 
 static inline bool is_delimiter(char data)
 {
-	return is_whitespace(data) || data == '(' || data == ')' || data == '"' || data == ';';
+	return is_whitespace(data) || data == '(' || data == ')' || data == '"' || data == ';' || data == 0;
 }
 
 static inline char tolower(char data)
@@ -122,7 +122,7 @@ static struct lusp_object_t* read_symbol(struct reader_t* reader)
 	
 	// scan for delimiter
 	char ch = peekchar(reader);
-	check(reader, ch != 0 && !is_delimiter(ch), "symbol expected");
+	check(reader, !is_delimiter(ch), "symbol expected");
 
 	do
 	{
@@ -130,7 +130,7 @@ static struct lusp_object_t* read_symbol(struct reader_t* reader)
 		
 		*buffer++ = ch;
 	}
-	while ((ch = nextchar(reader)) != 0 && !is_delimiter(ch));
+	while (!is_delimiter(ch = nextchar(reader)));
 	
 	// this is safe since buffer is one byte larger than buffer_end tells us
 	*buffer = 0;
@@ -163,7 +163,7 @@ static inline int read_integer_value(struct reader_t* reader, int base, const ch
 		
 		result = result * base + digit;
 	}
-	while ((ch = nextchar(reader)) != 0 && !is_delimiter(ch));
+	while (!is_delimiter(ch = nextchar(reader)));
 	
 	return result * sign;
 }
@@ -185,7 +185,7 @@ static inline struct lusp_object_t* read_real(struct reader_t* reader, int integ
 	float fractional = 0;
 	float power = 0.1f;
 	
-	for (char ch = peekchar(reader); ch != 0 && !is_delimiter(ch); ch = nextchar(reader))
+	for (char ch = peekchar(reader); !is_delimiter(ch); ch = nextchar(reader))
 	{
 		// read exponent part
 		if (tolower(ch) == 'e')
@@ -236,7 +236,7 @@ static struct lusp_object_t* read_number(struct reader_t* reader, bool negative)
 		
 		result = result * 10 + digit;
 	}
-	while ((ch = nextchar(reader)) != 0 && !is_delimiter(ch));
+	while (!is_delimiter(ch = nextchar(reader)));
 	
 	return lusp_mkinteger(sign * result);
 }
@@ -282,13 +282,13 @@ static struct lusp_object_t* read_datum(struct reader_t* reader)
 	{
 		ch = nextchar(reader);
 		
-		return (is_delimiter(ch) || ch == 0) ? lusp_mksymbol("+") : read_number(reader, false);
+		return is_delimiter(ch) ? lusp_mksymbol("+") : read_number(reader, false);
 	}
 	else if (ch == '-')
 	{
 		ch = nextchar(reader);
 		
-		return (is_delimiter(ch) || ch == 0) ? lusp_mksymbol("-") : read_number(reader, true);
+		return is_delimiter(ch) ? lusp_mksymbol("-") : read_number(reader, true);
 	}
 	else if (ch == '.')
 	{
