@@ -5,12 +5,16 @@
 #include <lusp/object.h>
 
 #include <core/string.h>
+#include <core/memory.h>
+#include <core/hash.h>
 #include <mem/arena.h>
 
 extern struct mem_arena_t g_lusp_heap;
 
-extern struct lusp_object_t g_lusp_true;
-extern struct lusp_object_t g_lusp_false;
+struct lusp_object_t g_lusp_true;
+struct lusp_object_t g_lusp_false;
+
+static struct lusp_object_t* g_lusp_symbols[1024];
 
 static inline struct lusp_object_t* mkobject(enum lusp_object_type_t type)
 {
@@ -33,10 +37,44 @@ static inline const char* mkstring(const char* value)
 	return result;
 }
 
+bool lusp_internal_object_init()
+{
+	// initialize builtin boolean values
+	g_lusp_true.type = LUSP_OBJECT_BOOLEAN;
+	g_lusp_true.boolean.value = true;
+
+	g_lusp_false.type = LUSP_OBJECT_BOOLEAN;
+	g_lusp_false.boolean.value = false;
+
+	// intialize symbol hash table
+	memset(g_lusp_symbols, 0, sizeof(g_lusp_symbols));
+	
+	return true;
+}
+
+void lusp_internal_object_term()
+{
+}
+
 struct lusp_object_t* lusp_mksymbol(const char* name)
 {
+	// compute hash
+	const unsigned int hash_mask = sizeof(g_lusp_symbols) / sizeof(g_lusp_symbols[0]) - 1;
+	unsigned int hash = core_hash_string(name) & hash_mask;
+	
+	// table lookup
+	for (struct lusp_object_t* object = g_lusp_symbols[hash]; object; object = object->symbol.next)
+		if (str_is_equal(name, object->symbol.name))
+			return object;
+			
+	// construct new object
 	struct lusp_object_t* result = mkobject(LUSP_OBJECT_SYMBOL);
 	result->symbol.name = mkstring(name);
+	
+	// insert object into hash table
+	result->symbol.next = g_lusp_symbols[hash];
+	g_lusp_symbols[hash] = result;
+	
 	return result;
 }
 

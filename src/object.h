@@ -36,6 +36,7 @@ struct lusp_object_t
 		struct
 		{
 			const char* name;
+			struct lusp_object_t* next;
 		} symbol;
 		
 		struct
@@ -71,6 +72,9 @@ struct lusp_object_t
 		} procedure;
 	};
 };
+
+bool lusp_internal_object_init();
+void lusp_internal_object_term();
 
 struct lusp_object_t* lusp_mksymbol(const char* name);
 struct lusp_object_t* lusp_mkboolean(bool value);

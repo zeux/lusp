@@ -8,7 +8,6 @@
 #include <lusp/vm.h>
 #include <lusp/environment.h>
 
-#include <core/string.h>
 #include <core/memory.h>
 #include <mem/arena.h>
 
@@ -19,7 +18,7 @@ extern struct mem_arena_t g_lusp_heap;
 
 struct binding_t
 {
-	const char* name;
+	struct lusp_object_t* symbol;
 };
 
 struct scope_t
@@ -28,6 +27,20 @@ struct scope_t
 	
 	struct binding_t binds[1024];
 	unsigned int bind_count;
+};
+
+struct symbols_t
+{
+	struct lusp_object_t* begin;
+	struct lusp_object_t* quote;
+	struct lusp_object_t* define;
+	struct lusp_object_t* lambda;
+	struct lusp_object_t* let;
+	struct lusp_object_t* letseq;
+	struct lusp_object_t* set;
+	struct lusp_object_t* if_;
+	struct lusp_object_t* when;
+	struct lusp_object_t* unless;
 };
 
 struct compiler_t
@@ -44,6 +57,9 @@ struct compiler_t
 	
 	// error facilities
 	jmp_buf* error;
+	
+	// symbol table
+	struct symbols_t* symbols;
 };
 
 static inline void check(struct compiler_t* compiler, bool condition, const char* message)
@@ -56,10 +72,10 @@ static inline void check(struct compiler_t* compiler, bool condition, const char
 	}
 }
 
-static inline bool find_bind_local(struct scope_t* scope, const char* name, unsigned int* index)
+static inline bool find_bind_local(struct scope_t* scope, struct lusp_object_t* symbol, unsigned int* index)
 {
 	for (unsigned int i = 0; i < scope->bind_count; ++i)
-		if (str_is_equal(scope->binds[i].name, name))
+		if (scope->binds[i].symbol == symbol)
 		{
 			*index = i;
 			return true;
@@ -68,7 +84,7 @@ static inline bool find_bind_local(struct scope_t* scope, const char* name, unsi
 	return false;
 }
 
-static inline bool find_bind(struct compiler_t* compiler, const char* name, unsigned int* depth, unsigned int* index)
+static inline bool find_bind(struct compiler_t* compiler, struct lusp_object_t* symbol, unsigned int* depth, unsigned int* index)
 {
 	*depth = 0;
 	
@@ -76,7 +92,7 @@ static inline bool find_bind(struct compiler_t* compiler, const char* name, unsi
 	
 	while (scope)
 	{
-		if (find_bind_local(scope, name, index)) return true;
+		if (find_bind_local(scope, symbol, index)) return true;
 		
 		*depth = *depth + 1;
 		scope = scope->parent;
@@ -118,7 +134,7 @@ static void compile_symbol_getset(struct compiler_t* compiler, struct lusp_objec
 	
 	unsigned int local_depth, local_index;
 	
-	if (find_bind(compiler, object->symbol.name, &local_depth, &local_index))
+	if (find_bind(compiler, object, &local_depth, &local_index))
 	{
 		struct lusp_vm_op_t op;
 	
@@ -132,7 +148,7 @@ static void compile_symbol_getset(struct compiler_t* compiler, struct lusp_objec
 		struct lusp_vm_op_t op;
 	
 		op.opcode = set ? LUSP_VMOP_SET_GLOBAL : LUSP_VMOP_GET_GLOBAL;
-		op.getset_global.slot = lusp_environment_get_slot(compiler->env, object->symbol.name);
+		op.getset_global.slot = lusp_environment_get_slot(compiler->env, object);
 		emit(compiler, op);
 	}
 }
@@ -288,12 +304,11 @@ static void compile_let_pushvardecl(struct compiler_t* compiler, struct scope_t*
     check(compiler, decl && decl->type == LUSP_OBJECT_CONS && decl->cons.cdr == 0, "let: malformed syntax");
 
     // add value to new scope
-    const char* name = var->symbol.name;
     unsigned int index;
     
-    check(compiler, !find_bind_local(scope, name, &index), "let: duplicate arguments detected");
+    check(compiler, !find_bind_local(scope, var, &index), "let: duplicate arguments detected");
     
-    scope->binds[scope->bind_count++].name = name;
+    scope->binds[scope->bind_count++].symbol = var;
 
     // compute value in the old scope
     compile(compiler, decl->cons.car);
@@ -420,8 +435,8 @@ static void compile_define(struct compiler_t* compiler, struct lusp_object_t* ar
 	check(compiler, car->type == LUSP_OBJECT_SYMBOL || car->cons.car->type == LUSP_OBJECT_SYMBOL,
 		"define: function declaration has to start with symbol");
 	
-	// get actual name
-	const char* name = (car->type == LUSP_OBJECT_SYMBOL) ? car->symbol.name : car->cons.car->symbol.name;
+	// get actual symbol
+	struct lusp_object_t* symbol = (car->type == LUSP_OBJECT_SYMBOL) ? car : car->cons.car;
 	
 	// compile closure/value
 	if (car->type == LUSP_OBJECT_CONS)
@@ -437,7 +452,7 @@ static void compile_define(struct compiler_t* compiler, struct lusp_object_t* ar
 	struct lusp_vm_op_t op;
 	
 	op.opcode = LUSP_VMOP_SET_GLOBAL; // $$$ support local defines
-	op.getset_global.slot = lusp_environment_get_slot(compiler->env, name);
+	op.getset_global.slot = lusp_environment_get_slot(compiler->env, symbol);
 	emit(compiler, op);
 }
 
@@ -455,27 +470,27 @@ static void compile_syntax(struct compiler_t* compiler, struct lusp_object_t* fu
 {
 	DL_ASSERT(func && func->type == LUSP_OBJECT_SYMBOL);
 	
-	const char* name = func->symbol.name;
+	struct symbols_t* symbols = compiler->symbols;
 	
-	if (str_is_equal(name, "begin"))
+	if (func == symbols->begin)
 		compile_begin(compiler, args);
-	else if (str_is_equal(name, "quote"))
+	else if (func == symbols->quote)
 		compile_quote(compiler, args);
-	else if (str_is_equal(name, "define"))
+	else if (func == symbols->define)
 		compile_define(compiler, args);
-	else if (str_is_equal(name, "lambda"))
+	else if (func == symbols->lambda)
 		compile_lambda(compiler, args);
-	else if (str_is_equal(name, "let"))
+	else if (func == symbols->let)
 		compile_let(compiler, args);
-	else if (str_is_equal(name, "let*"))
+	else if (func == symbols->letseq)
 		compile_letseq(compiler, args);
-	else if (str_is_equal(name, "set!"))
+	else if (func == symbols->set)
 		compile_set(compiler, args);
-	else if (str_is_equal(name, "if"))
+	else if (func == symbols->if_)
 		compile_if(compiler, args);
-	else if (str_is_equal(name, "when"))
+	else if (func == symbols->when)
 		compile_whenunless(compiler, args, false);
-	else if (str_is_equal(name, "unless"))
+	else if (func == symbols->unless)
 		compile_whenunless(compiler, args, true);
 	else
 		compile_call(compiler, func, args);
@@ -538,12 +553,12 @@ static void compile_closure_code(struct compiler_t* compiler, struct lusp_object
         
         rest = (arg->type == LUSP_OBJECT_SYMBOL);
         
-        const char* name = (arg->type == LUSP_OBJECT_CONS) ? arg->cons.car->symbol.name : arg->symbol.name;
+        struct lusp_object_t* symbol = (arg->type == LUSP_OBJECT_CONS) ? arg->cons.car : arg;
         unsigned int index;
         
-        check(compiler, !find_bind_local(&scope, name, &index), "lambda: duplicate arguments detected");
+        check(compiler, !find_bind_local(&scope, symbol, &index), "lambda: duplicate arguments detected");
 
-        scope.binds[scope.bind_count++].name = name;
+        scope.binds[scope.bind_count++].symbol = symbol;
         
         if (rest) break;
     }
@@ -576,6 +591,7 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* parent, stru
     compiler.scope = parent->scope;
     compiler.op_count = 0;
     compiler.error = parent->error;
+    compiler.symbols = parent->symbols;
     
     // compile closure code
     compile_closure_code(&compiler, args, body);
@@ -595,17 +611,30 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* parent, stru
 
 struct lusp_object_t* lusp_compile(struct lusp_environment_t* env, struct lusp_object_t* object)
 {
+	// setup error handling facilities
 	jmp_buf buf;
 	
 	if (setjmp(buf)) return 0;
 	
+	// create symbol table
+	struct symbols_t symbols =
+	{
+		lusp_mksymbol("begin"), lusp_mksymbol("quote"), lusp_mksymbol("define"), lusp_mksymbol("lambda"),
+		lusp_mksymbol("let"), lusp_mksymbol("let*"), lusp_mksymbol("set!"), lusp_mksymbol("if"),
+		lusp_mksymbol("when"), lusp_mksymbol("unless")
+	};
+	
+	// create compiler 
 	struct compiler_t compiler;
 	
     compiler.env = env;
     compiler.scope = 0;
     compiler.error = &buf;
+    compiler.symbols = &symbols;
     
+    // compile bytecode
 	struct lusp_vm_bytecode_t* bytecode = create_closure(&compiler, 0, object);
 	
+	// create resulting closure
 	return lusp_mkclosure(0, bytecode);
 }
