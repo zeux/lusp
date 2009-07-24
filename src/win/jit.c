@@ -15,6 +15,8 @@
 
 extern struct mem_arena_t g_lusp_heap;
 
+extern struct lusp_object_t g_lusp_false;
+
 void* allocate_code()
 {
 	void* result = mem_arena_allocate(&g_lusp_heap, 16*1024, 4096);
@@ -142,7 +144,7 @@ static inline uint8_t* compile_call(uint8_t* code, struct lusp_vm_op_t op, struc
 {
 	// cmp dword ptr [eax], LUSP_OBJECT_PROCEDURE
 	DL_STATIC_ASSERT(offsetof(struct lusp_object_t, type) == 0);
-	CMP_PEAX_IMM8(LUSP_OBJECT_PROCEDURE);
+	CMP_PREG_IMM8(EAX, LUSP_OBJECT_PROCEDURE);
 
 	// jne closure
 	uint8_t* closure;
@@ -226,35 +228,15 @@ static inline uint8_t* compile_jump(uint8_t* code, struct lusp_vm_op_t op)
 	return code;
 }
 
-static inline uint8_t* compile_jump_ifnot(uint8_t* code, struct lusp_vm_op_t op)
+static inline uint8_t* compile_jump_cond(uint8_t* code, struct lusp_vm_op_t op)
 {
-	(void)op;
-	
-	// test eax, eax
-	TEST_EAX_EAX();
-
-	// jz skip
-	uint8_t* skip1;
-	JZ_IMM8(skip1);
-
-	// cmp dword ptr [eax], LUSP_OBJECT_BOOLEAN
-	DL_STATIC_ASSERT(offsetof(struct lusp_object_t, type) == 0);
-	CMP_PEAX_IMM8(LUSP_OBJECT_BOOLEAN);
-
-	// jne skip
-	uint8_t* skip2;
-	JNE_IMM8(skip2);
-
-	// cmp dword ptr [eax + offset], false
-	CMP_PEAX_OFF8_IMM8(offsetof(struct lusp_object_t, boolean.value), 0);
+	// cmp eax, &g_lusp_false
+	CMP_EAX_IMM32(&g_lusp_false);
 
 	// je label
-	JE_IMM32(0);
+	// jne label
+	(op.opcode == LUSP_VMOP_JUMP_IFNOT) ? (JE_IMM32(0)) : (JNE_IMM32(0));
 
-	// skip:
-	LABEL8(skip1);
-	LABEL8(skip2);
-	
 	return code;
 }
 
@@ -341,8 +323,9 @@ static void compile(uint8_t* code, struct lusp_environment_t* env, struct lusp_v
 			jumps[i] = code - sizeof(uint32_t);
 			break;
 			
+		case LUSP_VMOP_JUMP_IF:
 		case LUSP_VMOP_JUMP_IFNOT:
-			code = compile_jump_ifnot(code, op);
+			code = compile_jump_cond(code, op);
 			jumps[i] = code - sizeof(uint32_t);
 			break;
 			

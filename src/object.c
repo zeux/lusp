@@ -9,6 +9,9 @@
 
 extern struct mem_arena_t g_lusp_heap;
 
+extern struct lusp_object_t g_lusp_true;
+extern struct lusp_object_t g_lusp_false;
+
 static inline struct lusp_object_t* mkobject(enum lusp_object_type_t type)
 {
 	struct lusp_object_t* result = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_object_t);
@@ -39,9 +42,7 @@ struct lusp_object_t* lusp_mksymbol(const char* name)
 
 struct lusp_object_t* lusp_mkboolean(bool value)
 {
-	struct lusp_object_t* result = mkobject(LUSP_OBJECT_BOOLEAN);
-	result->boolean.value = value;
-	return result;
+	return value ? &g_lusp_true : &g_lusp_false;
 }
 
 struct lusp_object_t* lusp_mkinteger(int value)

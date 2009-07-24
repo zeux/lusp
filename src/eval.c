@@ -14,6 +14,8 @@
 
 extern struct mem_arena_t g_lusp_heap;
 
+extern struct lusp_object_t g_lusp_false;
+
 struct continuation_t
 {
     struct lusp_vm_bind_frame_t* bind_frame;
@@ -191,9 +193,12 @@ static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* bytecode)
             pc = op->jump.index;
             break;
             
+        case LUSP_VMOP_JUMP_IF:
+            if (value != &g_lusp_false) pc = op->jump.index;
+            break;
+            
         case LUSP_VMOP_JUMP_IFNOT:
-            if (value && value->type == LUSP_OBJECT_BOOLEAN && value->boolean.value == false)
-                pc = op->jump.index;
+            if (value == &g_lusp_false) pc = op->jump.index;
             break;
             
         case LUSP_VMOP_CREATE_CLOSURE:

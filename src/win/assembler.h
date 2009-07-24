@@ -42,6 +42,7 @@
 #define JMP_IMM32(offset) EMIT8(0xe9), EMIT32(offset)
 
 #define JE_IMM32(offset) EMIT8(0x0f), EMIT8(0x84), EMIT32(offset)
+#define JNE_IMM32(offset) EMIT8(0x0f), EMIT8(0x85), EMIT32(offset)
 
 #define JMP_IMM8(label) EMIT8(0xeb), label = CODE(), EMIT8(0)
 #define JZ_IMM8(label) EMIT8(0x74), label = CODE(), EMIT8(0)
@@ -50,11 +51,9 @@
 #define LABEL8(label) *(uint8_t*)label = (uint8_t)(uintptr_t)(CODE() - label - 1)
 #define LABEL32(label, code) *(uint32_t*)label = (uint32_t)(uintptr_t)(code - label - 4)
 
-#define TEST_EAX_EAX() EMIT8(0x85), EMIT8(0xc0)
-
-#define CMP_PEAX_IMM8(value) EMIT8(0x83), EMIT8(0x38), EMIT8(value)
-
-#define CMP_PEAX_OFF8_IMM8(offset, value) EMIT8(0x83), EMIT8(0x78), EMIT8(offset), EMIT8(value)
+#define CMP_EAX_IMM32(value) EMIT8(0x3d), EMIT32(value)
+#define CMP_PREG_IMM8(reg, value) EMIT8(0x83), EMIT8(0x38 + reg), EMIT8(value)
+#define CMP_PREG_OFF8_IMM8(reg, offset, value) EMIT8(0x83), EMIT8(0x78 + reg), EMIT8(offset), EMIT8(value)
 
 #define CALL_REG(reg) EMIT8(0xff), EMIT8(0xd0 + reg)
 

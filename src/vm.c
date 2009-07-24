@@ -65,6 +65,10 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, b
 			printf("%s%02d: jump %d\n", indent, i, op->jump.index);
 			break;
 			
+		case LUSP_VMOP_JUMP_IF:
+			printf("%s%02d: jump_if %d\n", indent, i, op->jump.index);
+			break;
+			
 		case LUSP_VMOP_JUMP_IFNOT:
 			printf("%s%02d: jump_ifnot %d\n", indent, i, op->jump.index);
 			break;
