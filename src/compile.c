@@ -459,7 +459,9 @@ static void compile_define(struct compiler_t* compiler, struct lusp_object_t* ar
 
 static void compile_quote(struct compiler_t* compiler, struct lusp_object_t* args)
 {
-	compile_object(compiler, args);
+	check(compiler, args && args->type == LUSP_OBJECT_CONS && args->cons.cdr == 0, "quote: malformed syntax");
+	
+	compile_object(compiler, args->cons.car);
 }
 
 static void compile_begin(struct compiler_t* compiler, struct lusp_object_t* args)
