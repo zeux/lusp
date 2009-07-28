@@ -30,7 +30,7 @@ static inline bool is_digit(char data)
 
 static inline void check(struct lusp_lexer_t* lexer, bool condition, const char* message)
 {
-	if (!condition) lexer->error_handler(lexer->error_context, message);
+	if (!condition) lexer->error_handler(lexer, message);
 }
 
 static inline char nextchar(struct lusp_lexer_t* lexer)
@@ -46,7 +46,13 @@ static inline char peekchar(struct lusp_lexer_t* lexer)
 static inline void skipws(struct lusp_lexer_t* lexer)
 {
 	// skip whitespace
-	while (is_whitespace(peekchar(lexer))) nextchar(lexer);
+	while (is_whitespace(peekchar(lexer)))
+	{
+		// count lines
+		lexer->line += (peekchar(lexer) == '\n');
+		
+		nextchar(lexer);
+	}
 	
 	// skip comment
 	if (peekchar(lexer) == ';')
@@ -74,6 +80,9 @@ static inline void parse_string(struct lusp_lexer_t* lexer)
 	while ((ch = nextchar(lexer)) != 0 && ch != '"')
 	{
 		check(lexer, buffer < buffer_end, "string is too long");
+		
+		// count lines
+		lexer->line += (ch == '\n');
 		
 		// unescape
 		if (ch == '\\')
@@ -277,6 +286,7 @@ enum lusp_lexeme_t lusp_lexer_next(struct lusp_lexer_t* lexer)
 	
 	// remember lexeme position ($$$)
 	lexer->lexeme_data = lexer->data;
+	lexer->lexeme_line = lexer->line;
 	
 	// parse symbol
 	char ch = peekchar(lexer);

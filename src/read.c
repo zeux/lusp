@@ -9,7 +9,7 @@
 
 static inline void check(struct lusp_lexer_t* lexer, bool condition, const char* message)
 {
-	if (!condition) lexer->error_handler(lexer->error_context, message);
+	if (!condition) lexer->error_handler(lexer, message);
 }
 
 static struct lusp_object_t* read_atom(struct lusp_lexer_t* lexer);

@@ -29,7 +29,7 @@ union lusp_lexeme_value_t
 	char symbol[1024];
 };
 
-typedef void (*lusp_lexer_error_handler_t)(void* context, const char* message);
+typedef void (*lusp_lexer_error_handler_t)(struct lusp_lexer_t* lexer, const char* message);
 
 struct lusp_lexer_t
 {
@@ -37,9 +37,12 @@ struct lusp_lexer_t
 	enum lusp_lexeme_t lexeme;
 	union lusp_lexeme_value_t value;
 	
+	// lexeme information
+	const char* lexeme_data;
+	unsigned int lexeme_line;
+	
 	// stream information
 	const char* data;
-	const char* lexeme_data;
 	unsigned int line;
 	
 	// error handler
