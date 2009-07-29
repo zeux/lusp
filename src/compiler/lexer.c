@@ -20,7 +20,7 @@ static inline bool is_delimiter(char data)
 
 static inline char tolower(char data)
 {
-	return (unsigned char)(data - 'A') < 26 ? data - 'A' : data;
+	return (unsigned char)(data - 'A') < 26 ? data - 'A' + 'a' : data;
 }
 
 static inline bool is_digit(char data)
