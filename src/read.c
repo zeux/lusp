@@ -59,23 +59,49 @@ static struct lusp_object_t* read_list(struct lusp_lexer_t* lexer)
 	return head;
 }
 
+static inline struct lusp_object_t* next_lexeme(struct lusp_lexer_t* lexer, struct lusp_object_t* result)
+{
+	lusp_lexer_next(lexer);
+	return result;
+}
+
+static inline struct lusp_object_t* read_symbol_list(struct lusp_lexer_t* lexer, const char* symbol)
+{
+	lusp_lexer_next(lexer);
+	return lusp_mkcons(lusp_mksymbol(symbol), lusp_mkcons(read_atom(lexer), 0));
+}
+
 static struct lusp_object_t* read_atom(struct lusp_lexer_t* lexer)
 {
-#define RETURN(lexeme, ret) case lexeme: { struct lusp_object_t* r = ret; lusp_lexer_next(lexer); return r; }
-#define RETURNLIST(lexeme, symbol) case lexeme: { lusp_lexer_next(lexer); return lusp_mkcons(lusp_mksymbol(symbol), lusp_mkcons(read_atom(lexer), 0)); }
-	
 	switch (lexer->lexeme)
 	{
-	RETURN(LUSP_LEXEME_LITERAL_BOOLEAN, lusp_mkboolean(lexer->value.boolean));
-	RETURN(LUSP_LEXEME_LITERAL_INTEGER, lusp_mkinteger(lexer->value.integer));
-	RETURN(LUSP_LEXEME_LITERAL_REAL, lusp_mkreal(lexer->value.real));
-	RETURN(LUSP_LEXEME_LITERAL_STRING, lusp_mkstring(lexer->value.string));
-	RETURN(LUSP_LEXEME_SYMBOL, lusp_mksymbol(lexer->value.symbol));
-	RETURNLIST(LUSP_LEXEME_QUOTE, "quote");
-	RETURNLIST(LUSP_LEXEME_BACKQUOTE, "quasiquote");
-	RETURNLIST(LUSP_LEXEME_COMMA, "unquote");
-	RETURNLIST(LUSP_LEXEME_COMMA_AT, "unquote-splicing");
-	
+	case LUSP_LEXEME_LITERAL_BOOLEAN:
+		return next_lexeme(lexer, lusp_mkboolean(lexer->value.boolean));
+		
+	case LUSP_LEXEME_LITERAL_INTEGER:
+		return next_lexeme(lexer, lusp_mkinteger(lexer->value.integer));
+		
+	case LUSP_LEXEME_LITERAL_REAL:
+		return next_lexeme(lexer, lusp_mkreal(lexer->value.real));
+		
+	case LUSP_LEXEME_LITERAL_STRING:
+		return next_lexeme(lexer, lusp_mkstring(lexer->value.string));
+		
+	case LUSP_LEXEME_SYMBOL:
+		return next_lexeme(lexer, lusp_mksymbol(lexer->value.symbol));
+		
+	case LUSP_LEXEME_QUOTE:
+		return read_symbol_list(lexer, "quote");
+		
+	case LUSP_LEXEME_BACKQUOTE:
+		return read_symbol_list(lexer, "quasiquote");
+		
+	case LUSP_LEXEME_COMMA:
+		return read_symbol_list(lexer, "unquote");
+		
+	case LUSP_LEXEME_COMMA_AT:
+		return read_symbol_list(lexer, "unquote-splicing");
+		
 	case LUSP_LEXEME_OPEN_BRACE:
 		return read_list(lexer);
 		
@@ -83,9 +109,6 @@ static struct lusp_object_t* read_atom(struct lusp_lexer_t* lexer)
 		check(lexer, false, "unexpected token");
 		return 0;
 	}
-	
-#undef RETURNLIST
-#undef RETURN
 }
 
 struct lusp_object_t* lusp_read(struct lusp_lexer_t* lexer)
