@@ -83,9 +83,12 @@ typedef struct lusp_object_t* (*lusp_vm_evaluator_t)(struct lusp_vm_bytecode_t* 
 struct lusp_vm_bytecode_t
 {
     struct lusp_environment_t* env;
+    
+    unsigned int local_count;
+    unsigned int upval_count;
 
 	struct lusp_vm_op_t* ops;
-	unsigned int count;
+	unsigned int op_count;
 
 	void* jit;
 	

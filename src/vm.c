@@ -14,7 +14,9 @@
 
 static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, bool deep)
 {
-	for (unsigned int i = 0; i < code->count; ++i)
+	printf("%s%d locals, %d upvals\n", indent, code->local_count, code->upval_count);
+	
+	for (unsigned int i = 0; i < code->op_count; ++i)
 	{
 		struct lusp_vm_op_t* op = &code->ops[i];
 		

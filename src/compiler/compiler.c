@@ -22,6 +22,7 @@ extern struct mem_arena_t g_lusp_heap;
 struct binding_t
 {
 	struct lusp_object_t* symbol;
+	unsigned int index;
 };
 
 struct scope_t
@@ -39,6 +40,10 @@ struct compiler_t
     
 	// scope stack
 	struct scope_t* scope;
+	
+	// variables
+	unsigned int local_count;
+	unsigned int upval_count;
 	
 	// opcode buffer
 	struct lusp_vm_op_t ops[1024];
@@ -58,33 +63,28 @@ static inline void check(struct compiler_t* compiler, bool condition, const char
 	}
 }
 
-static inline bool find_bind_local(struct scope_t* scope, struct lusp_object_t* symbol, unsigned int* index)
+static inline struct binding_t* find_bind_local(struct scope_t* scope, struct lusp_object_t* symbol)
 {
 	for (unsigned int i = 0; i < scope->bind_count; ++i)
 		if (scope->binds[i].symbol == symbol)
-		{
-			*index = i;
-			return true;
-		}
+			return &scope->binds[i];
 	
-	return false;
+	return 0;
 }
 
-static inline bool find_bind(struct compiler_t* compiler, struct lusp_object_t* symbol, unsigned int* depth, unsigned int* index)
+static inline struct binding_t* find_bind(struct compiler_t* compiler, struct lusp_object_t* symbol)
 {
-	*depth = 0;
-	
 	struct scope_t* scope = compiler->scope;
 	
 	while (scope)
 	{
-		if (find_bind_local(scope, symbol, index)) return true;
+		struct binding_t* result = find_bind_local(scope, symbol);
+		if (result) return result;
 		
-		*depth = *depth + 1;
 		scope = scope->parent;
 	}
 	
-	return false;
+	return 0;
 }
 
 static inline void emit(struct compiler_t* compiler, struct lusp_vm_op_t op)
@@ -117,14 +117,14 @@ static void compile_symbol_getset(struct compiler_t* compiler, struct lusp_objec
 {
 	DL_ASSERT(symbol && symbol->type == LUSP_OBJECT_SYMBOL);
 	
-	unsigned int local_depth, local_index;
+	struct binding_t* bind = find_bind(compiler, symbol);
 	
-	if (find_bind(compiler, symbol, &local_depth, &local_index))
+	if (bind)
 	{
 		struct lusp_vm_op_t op;
 	
 		op.opcode = set ? LUSP_VMOP_SET_LOCAL : LUSP_VMOP_GET_LOCAL;
-		op.getset_local.index = local_index;
+		op.getset_local.index = bind->index;
 		emit(compiler, op);
 	}
 	else
@@ -290,19 +290,22 @@ static void compile_let_pushvardecl(struct compiler_t* compiler, struct scope_t*
     check(compiler, decl && decl->type == LUSP_AST_CONS && decl->cons.cdr == 0, "let: malformed syntax");
 
     // add value to new scope
-    unsigned int index;
+    unsigned int index = compiler->local_count++;
     
-    check(compiler, !find_bind_local(scope, var->symbol, &index), "let: duplicate arguments detected");
+    check(compiler, !find_bind_local(scope, var->symbol), "let: duplicate arguments detected");
     
-    scope->binds[scope->bind_count++].symbol = var->symbol;
+    scope->binds[scope->bind_count].symbol = var->symbol;
+    scope->binds[scope->bind_count].index = index;
+    scope->bind_count++;
 
     // compute value in the old scope
     compile(compiler, decl->cons.car);
 
-    // push value on stack
+    // store value in locals
     struct lusp_vm_op_t op;
 
-    op.opcode = LUSP_VMOP_PUSH;
+    op.opcode = LUSP_VMOP_SET_LOCAL;
+    op.getset_local.index = index;
     emit(compiler, op);
 }
 
@@ -541,11 +544,12 @@ static void compile_closure_code(struct compiler_t* compiler, struct lusp_ast_no
         rest = (arg->type == LUSP_AST_SYMBOL);
         
         struct lusp_object_t* symbol = (arg->type == LUSP_AST_CONS) ? arg->cons.car->symbol : arg->symbol;
-        unsigned int index;
         
-        check(compiler, !find_bind_local(&scope, symbol, &index), "lambda: duplicate arguments detected");
+        check(compiler, !find_bind_local(&scope, symbol), "lambda: duplicate arguments detected");
 
-        scope.binds[scope.bind_count++].symbol = symbol;
+        scope.binds[scope.bind_count].symbol = symbol;
+        scope.binds[scope.bind_count].index = compiler->local_count++;
+        scope.bind_count++;
         
         if (rest) break;
     }
@@ -567,6 +571,8 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* parent, stru
     
     compiler.env = parent->env;
     compiler.scope = parent->scope;
+    compiler.local_count = 0;
+    compiler.upval_count = 0;
     compiler.op_count = 0;
     compiler.error = parent->error;
     
@@ -579,8 +585,10 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* parent, stru
 
     struct lusp_vm_bytecode_t* code = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_vm_bytecode_t);
     code->env = parent->env;
+    code->local_count = compiler.local_count;
+    code->upval_count = compiler.upval_count;
     code->ops = ops;
-    code->count = compiler.op_count;
+    code->op_count = compiler.op_count;
 	code->jit = 0;
 	
 	lusp_bytecode_setup(code);
