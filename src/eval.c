@@ -16,7 +16,7 @@ extern struct mem_arena_t g_lusp_heap;
 
 extern struct lusp_object_t g_lusp_false;
 
-static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_vm_bind_frame_t* bind_frame, struct lusp_object_t** eval_stack, unsigned int arg_count)
+static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t** eval_stack, unsigned int arg_count)
 {
     struct lusp_object_t* value = 0;
     unsigned int pc = 0;
@@ -34,17 +34,19 @@ static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_v
             break;
             
         case LUSP_VMOP_GET_LOCAL:
-        {
 			value = eval_stack[op->getset_local.index];
-        } break;
+	        break;
             
         case LUSP_VMOP_SET_LOCAL:
-        {
 			eval_stack[op->getset_local.index] = value;
-        } break;
+	        break;
             
         case LUSP_VMOP_GET_UPVAL:
+			value = *closure->upvals[op->getset_upval.index];
+			break;
+			
         case LUSP_VMOP_SET_UPVAL:
+			*closure->upvals[op->getset_upval.index] = value;
 			break;
 			
         case LUSP_VMOP_GET_GLOBAL:
@@ -67,7 +69,7 @@ static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_v
                 unsigned int count = op->call.count;
                 
                 eval_stack_top -= count;
-				value = value->closure.code->evaluator(value->closure.code, value->closure.frame, eval_stack_top, count);
+				value = value->closure.code->evaluator(value->closure.code, value->closure.closure, eval_stack_top, count);
             }
             else
             {
@@ -94,7 +96,16 @@ static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_v
             break;
             
         case LUSP_VMOP_CREATE_CLOSURE:
-            value = lusp_mkclosure(bind_frame, op->create_closure.code);
+            value = lusp_mkclosure(op->create_closure.code);
+            
+            // set upvalues
+            for (unsigned int i = 0; i < op->create_closure.code->upval_count; ++i, ++pc)
+            {
+				struct lusp_vm_op_t* op = &code->ops[pc];
+				
+				DL_ASSERT(op->opcode == LUSP_VMOP_GET_LOCAL || op->opcode == LUSP_VMOP_GET_UPVAL);
+				value->closure.closure->upvals[i] = (op->opcode == LUSP_VMOP_GET_LOCAL) ? &eval_stack[op->getset_local.index] : closure->upvals[op->getset_upval.index];
+            }
             break;
         }
     }

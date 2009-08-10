@@ -4,6 +4,8 @@
 
 #include <lusp/object.h>
 
+#include <lusp/vm.h>
+
 #include <core/string.h>
 #include <core/memory.h>
 #include <core/hash.h>
@@ -112,10 +114,12 @@ struct lusp_object_t* lusp_mkcons(struct lusp_object_t* car, struct lusp_object_
 	return result;
 }
 
-struct lusp_object_t* lusp_mkclosure(struct lusp_vm_bind_frame_t* frame, struct lusp_vm_bytecode_t* code)
+struct lusp_object_t* lusp_mkclosure(struct lusp_vm_bytecode_t* code)
 {
     struct lusp_object_t* result = mkobject(LUSP_OBJECT_CLOSURE);
-    result->closure.frame = frame;
+    
+	result->closure.closure = (struct lusp_vm_closure_t*)MEM_ARENA_NEW_ARRAY(&g_lusp_heap, struct lusp_object_t**, code->upval_count);
+	DL_ASSERT(result->closure.closure);
     result->closure.code = code;
     return result;
 }
