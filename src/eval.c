@@ -18,15 +18,16 @@ extern struct lusp_object_t g_lusp_false;
 
 static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t** eval_stack, unsigned int arg_count)
 {
+    struct lusp_vm_op_t* pc = code->ops;
+    
     struct lusp_object_t* value = 0;
-    unsigned int pc = 0;
     
     struct lusp_object_t** eval_stack_top = eval_stack + code->local_count;
     
     for (;;)
     {
-        struct lusp_vm_op_t* op = &code->ops[pc++];
-        
+		struct lusp_vm_op_t* op = pc++;
+		
         switch (op->opcode)
         {
         case LUSP_VMOP_GET_OBJECT:
@@ -84,29 +85,29 @@ static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_v
             return value;
             
         case LUSP_VMOP_JUMP:
-            pc = op->jump.index;
+            pc = op + op->jump.offset;
             break;
             
         case LUSP_VMOP_JUMP_IF:
-            if (value != &g_lusp_false) pc = op->jump.index;
+            if (value != &g_lusp_false) pc = op + op->jump.offset;
             break;
             
         case LUSP_VMOP_JUMP_IFNOT:
-            if (value == &g_lusp_false) pc = op->jump.index;
+            if (value == &g_lusp_false) pc = op + op->jump.offset;
             break;
             
         case LUSP_VMOP_CREATE_CLOSURE:
             value = lusp_mkclosure(op->create_closure.code);
             
             // set upvalues
-            for (unsigned int i = 0; i < op->create_closure.code->upval_count; ++i, ++pc)
+            for (unsigned int i = 0; i < op->create_closure.code->upval_count; ++i)
             {
-				struct lusp_vm_op_t* op = &code->ops[pc];
+				struct lusp_vm_op_t* op = pc++;
 				
 				DL_ASSERT(op->opcode == LUSP_VMOP_GET_LOCAL || op->opcode == LUSP_VMOP_GET_UPVAL);
 				value->closure.closure->upvals[i] = (op->opcode == LUSP_VMOP_GET_LOCAL) ? &eval_stack[op->getset_local.index] : closure->upvals[op->getset_upval.index];
             }
-            break;
+	        break;
         }
     }
 }

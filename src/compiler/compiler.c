@@ -125,6 +125,11 @@ static inline void emit(struct compiler_t* compiler, struct lusp_vm_op_t op)
 	compiler->ops[compiler->op_count++] = op;
 }
 
+static inline void fixup_jump(struct compiler_t* compiler, unsigned int jump, unsigned int dest)
+{
+	compiler->ops[jump].jump.offset = (int)dest - (int)jump;
+}
+
 static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, struct compiler_t* parent, struct lusp_ast_node_t* args, struct lusp_ast_node_t* body);
 static void compile(struct compiler_t* compiler, struct lusp_ast_node_t* node);
 
@@ -260,14 +265,14 @@ static void compile_whenunless(struct compiler_t* compiler, struct lusp_ast_node
 	struct lusp_vm_op_t op;
 
 	op.opcode = unless ? LUSP_VMOP_JUMP_IF : LUSP_VMOP_JUMP_IFNOT;
-	op.jump.index = ~0u;
+	op.jump.offset = 0;
 	emit(compiler, op);
 
 	// evaluate code
 	compile_list(compiler, code, false);
 
 	// fixup jump
-	compiler->ops[jump_op].jump.index = compiler->op_count;
+	fixup_jump(compiler, jump_op, compiler->op_count);
 }
 
 static void compile_if(struct compiler_t* compiler, struct lusp_ast_node_t* args)
@@ -293,7 +298,7 @@ static void compile_if(struct compiler_t* compiler, struct lusp_ast_node_t* args
 	struct lusp_vm_op_t op;
 	
 	op.opcode = LUSP_VMOP_JUMP_IFNOT;
-	op.jump.index = ~0u;
+	op.jump.offset = ~0u;
 	emit(compiler, op);
 	
 	// evaluate if code
@@ -303,15 +308,15 @@ static void compile_if(struct compiler_t* compiler, struct lusp_ast_node_t* args
 	unsigned int jump_op = compiler->op_count;
 	
 	op.opcode = LUSP_VMOP_JUMP;
-	op.jump.index = ~0u;
+	op.jump.offset = ~0u;
 	emit(compiler, op);
 	
 	// else code
 	compile(compiler, elsecode);
 	
 	// fixup jumps
-	compiler->ops[jump_ifnot_op].jump.index = jump_op + 1;
-	compiler->ops[jump_op].jump.index = compiler->op_count;
+	fixup_jump(compiler, jump_ifnot_op, jump_op + 1);
+	fixup_jump(compiler, jump_op, compiler->op_count);
 }
 
 static void compile_set(struct compiler_t* compiler, struct lusp_ast_node_t* args)

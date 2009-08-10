@@ -58,7 +58,7 @@ struct lusp_vm_op_t
 		
 		struct
 		{
-		    unsigned int index;
+		    int offset;
 		} jump;
 		
 		struct
