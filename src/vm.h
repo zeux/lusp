@@ -12,12 +12,11 @@ enum lusp_vm_opcode_t
 	LUSP_VMOP_GET_OBJECT,
 	LUSP_VMOP_GET_LOCAL,
 	LUSP_VMOP_SET_LOCAL,
+	LUSP_VMOP_GET_UPVAL,
+	LUSP_VMOP_SET_UPVAL,
 	LUSP_VMOP_GET_GLOBAL,
 	LUSP_VMOP_SET_GLOBAL,
 	LUSP_VMOP_PUSH,
-	LUSP_VMOP_BIND,
-	LUSP_VMOP_BIND_REST,
-	LUSP_VMOP_UNBIND,
 	LUSP_VMOP_CALL,
 	LUSP_VMOP_RETURN,
 	LUSP_VMOP_JUMP,
@@ -39,19 +38,18 @@ struct lusp_vm_op_t
 		
 		struct
 		{
-			unsigned int depth;
 			unsigned int index;
 		} getset_local;
 		
 		struct
 		{
-			struct lusp_environment_slot_t* slot;
-		} getset_global;
+			unsigned int index;
+		} getset_upval;
 		
 		struct
 		{
-			unsigned int count;
-		} bind;
+			struct lusp_environment_slot_t* slot;
+		} getset_global;
 		
 		struct
 		{

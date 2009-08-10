@@ -1,5 +1,7 @@
 // DeepLight Engine (c) Zeux 2006-2009
 
+#if 0
+
 #include <core/common.h>
 
 #include <lusp/jit.h>
@@ -413,3 +415,5 @@ void lusp_compile_jit(struct lusp_vm_bytecode_t* code)
 	
 	code->evaluator = (lusp_vm_evaluator_t)code->jit;
 }
+
+#endif

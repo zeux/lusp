@@ -6,6 +6,7 @@
 
 #include <lusp/write.h>
 #include <lusp/environment.h>
+#include <lusp/object.h>
 
 #include <core/string.h>
 
@@ -27,30 +28,22 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, b
 			
 		case LUSP_VMOP_GET_LOCAL:
 		case LUSP_VMOP_SET_LOCAL:
-			printf("%s%02d: %s_local %d %d\n", indent, i, (op->opcode == LUSP_VMOP_SET_LOCAL) ? "set" : "get",
-				op->getset_local.depth, op->getset_local.index);
+			printf("%s%02d: %s_local %d\n", indent, i, (op->opcode == LUSP_VMOP_SET_LOCAL) ? "set" : "get", op->getset_local.index);
+			break;
+			
+		case LUSP_VMOP_GET_UPVAL:
+		case LUSP_VMOP_SET_UPVAL:
+			printf("%s%02d: %s_upval %d\n", indent, i, (op->opcode == LUSP_VMOP_SET_UPVAL) ? "set" : "get", op->getset_upval.index);
 			break;
 			
 		case LUSP_VMOP_GET_GLOBAL:
 		case LUSP_VMOP_SET_GLOBAL:
 			printf("%s%02d: %s_global %p [ %s ]\n", indent, i, (op->opcode == LUSP_VMOP_SET_GLOBAL) ? "set" : "get",
-				op->getset_global.slot, op->getset_global.slot->name);
+				op->getset_global.slot, op->getset_global.slot->name->symbol.name);
 			break;
 			
 		case LUSP_VMOP_PUSH:
 			printf("%s%02d: push\n", indent, i);
-			break;
-			
-		case LUSP_VMOP_BIND:
-			printf("%s%02d: bind %d\n", indent, i, op->bind.count);
-			break;
-			
-		case LUSP_VMOP_BIND_REST:
-			printf("%s%02d: bind_rest %d\n", indent, i, op->bind.count);
-			break;
-			
-		case LUSP_VMOP_UNBIND:
-			printf("%s%02d: unbind\n", indent, i);
 			break;
 			
 		case LUSP_VMOP_CALL:

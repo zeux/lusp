@@ -12,6 +12,8 @@
 #include <core/memory.h>
 #include <mem/arena.h>
 
+#if 0
+
 extern struct mem_arena_t g_lusp_heap;
 
 extern struct lusp_object_t g_lusp_false;
@@ -165,6 +167,8 @@ static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_v
     }
 }
 
+#endif
+
 struct lusp_object_t* lusp_eval(struct lusp_object_t* object)
 {
 	if (!object || object->type != LUSP_OBJECT_CLOSURE) return 0;
@@ -173,10 +177,10 @@ struct lusp_object_t* lusp_eval(struct lusp_object_t* object)
 	
 	struct lusp_vm_bytecode_t* code = object->closure.code;
 	
-    return code->evaluator(code, 0, eval_stack, 0);
+    return 0; // code->evaluator(code, 0, eval_stack, 0);
 }
 
 void lusp_bytecode_setup(struct lusp_vm_bytecode_t* code)
 {
-	code->evaluator = eval;
+//	code->evaluator = eval;
 }

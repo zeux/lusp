@@ -124,7 +124,6 @@ static void compile_symbol_getset(struct compiler_t* compiler, struct lusp_objec
 		struct lusp_vm_op_t op;
 	
 		op.opcode = set ? LUSP_VMOP_SET_LOCAL : LUSP_VMOP_GET_LOCAL;
-		op.getset_local.depth = local_depth;
 		op.getset_local.index = local_index;
 		emit(compiler, op);
 	}
@@ -326,21 +325,10 @@ static void compile_letseq_helper(struct compiler_t* compiler, struct lusp_ast_n
 	
 	compile_let_pushvardecl(compiler, &scope, args->cons.car);
 	
-	// create binding
-	struct lusp_vm_op_t op;
-	
-	op.opcode = LUSP_VMOP_BIND;
-	op.bind.count = scope.bind_count;
-	emit(compiler, op);
-	
 	// evaluate the rest recursively in the new scope
     compiler->scope = &scope;
 	compile_letseq_helper(compiler, args->cons.cdr, body);
 	compiler->scope = scope.parent;
-	
-	// unbind
-	op.opcode = LUSP_VMOP_UNBIND;
-	emit(compiler, op);
 }
 
 static void compile_letseq(struct compiler_t* compiler, struct lusp_ast_node_t* args)
@@ -375,21 +363,10 @@ static void compile_let(struct compiler_t* compiler, struct lusp_ast_node_t* arg
 		compile_let_pushvardecl(compiler, &scope, vdlist->cons.car);
 	}
 	
-	// bind everything
-	struct lusp_vm_op_t op;
-	
-	op.opcode = LUSP_VMOP_BIND;
-	op.bind.count = scope.bind_count;
-	emit(compiler, op);
-	
 	// evaluate body in new scope
 	compiler->scope = &scope;
 	compile_list(compiler, cdr, false);
 	compiler->scope = scope.parent;
-	
-	// unbind new frame
-	op.opcode = LUSP_VMOP_UNBIND;
-	emit(compiler, op);
 }
 
 static void compile_closure(struct compiler_t* compiler, struct lusp_ast_node_t* args, struct lusp_ast_node_t* body)
@@ -573,21 +550,12 @@ static void compile_closure_code(struct compiler_t* compiler, struct lusp_ast_no
         if (rest) break;
     }
     
-    // bind arguments
-    struct lusp_vm_op_t op;
-    
-    op.opcode = rest ? LUSP_VMOP_BIND_REST : LUSP_VMOP_BIND;
-    op.bind.count = scope.bind_count - rest;
-    emit(compiler, op);
-
     // compile body
     compile_list(compiler, body, false);
     
-    // unbind
-    op.opcode = LUSP_VMOP_UNBIND;
-    emit(compiler, op);
-
     // return
+    struct lusp_vm_op_t op;
+    
     op.opcode = LUSP_VMOP_RETURN;
     emit(compiler, op);
 }
