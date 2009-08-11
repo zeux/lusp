@@ -29,6 +29,8 @@ union lusp_lexeme_value_t
 	char symbol[1024];
 };
 
+struct lusp_lexer_t;
+
 typedef void (*lusp_lexer_error_handler_t)(struct lusp_lexer_t* lexer, const char* message);
 
 struct lusp_lexer_t
