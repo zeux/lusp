@@ -10,14 +10,12 @@
 #include <lusp/vm.h>
 #include <lusp/environment.h>
 #include <lusp/eval.h>
+#include <lusp/memory.h>
 
 #include <core/memory.h>
-#include <mem/arena.h>
 
 #include <setjmp.h>
 #include <stdio.h>
-
-extern struct mem_arena_t g_lusp_heap;
 
 struct compiler_t;
 
@@ -650,10 +648,16 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, st
     compile_closure_code(compiler, args, body);
     
     // create new closure
-    struct lusp_vm_op_t* ops = MEM_ARENA_NEW_ARRAY(&g_lusp_heap, struct lusp_vm_op_t, compiler->op_count);
-    memcpy(ops, compiler->ops, compiler->op_count * sizeof(struct lusp_vm_op_t));
+    unsigned int ops_size = compiler->op_count * sizeof(struct lusp_vm_op_t);
+    
+    struct lusp_vm_op_t* ops = (struct lusp_vm_op_t*)lusp_memory_allocate(ops_size);
+    DL_ASSERT(ops);
+    
+    memcpy(ops, compiler->ops, ops_size);
 
-    struct lusp_vm_bytecode_t* code = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_vm_bytecode_t);
+    struct lusp_vm_bytecode_t* code = (struct lusp_vm_bytecode_t*)lusp_memory_allocate(sizeof(struct lusp_vm_bytecode_t));
+    DL_ASSERT(code);
+    
     code->env = parent->env;
     code->local_count = compiler->local_count;
     code->upval_count = compiler->upval_count;

@@ -5,13 +5,11 @@
 #include <lusp/object.h>
 
 #include <lusp/vm.h>
+#include <lusp/memory.h>
 
 #include <core/string.h>
 #include <core/memory.h>
 #include <core/hash.h>
-#include <mem/arena.h>
-
-extern struct mem_arena_t g_lusp_heap;
 
 struct lusp_object_t g_lusp_true;
 struct lusp_object_t g_lusp_false;
@@ -20,7 +18,7 @@ static struct lusp_object_t* g_lusp_symbols[1024];
 
 static inline struct lusp_object_t* mkobject(enum lusp_object_type_t type)
 {
-	struct lusp_object_t* result = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_object_t);
+	struct lusp_object_t* result = (struct lusp_object_t*)lusp_memory_allocate(sizeof(struct lusp_object_t));
 	DL_ASSERT(result);
 	
 	result->type = type;
@@ -31,7 +29,7 @@ static inline const char* mkstring(const char* value)
 {
 	size_t length = str_length(value);
 	
-	char* result = MEM_ARENA_NEW_ARRAY(&g_lusp_heap, char, length + 1);
+	char* result = (char*)lusp_memory_allocate(length + 1);
 	DL_ASSERT(result);
 	
 	str_copy(result, length + 1, value);
@@ -39,7 +37,7 @@ static inline const char* mkstring(const char* value)
 	return result;
 }
 
-bool lusp_internal_object_init()
+bool lusp_object_init()
 {
 	// initialize builtin boolean values
 	g_lusp_true.type = LUSP_OBJECT_BOOLEAN;
@@ -54,7 +52,7 @@ bool lusp_internal_object_init()
 	return true;
 }
 
-void lusp_internal_object_term()
+void lusp_object_term()
 {
 }
 
@@ -118,8 +116,9 @@ struct lusp_object_t* lusp_mkclosure(struct lusp_vm_bytecode_t* code, unsigned i
 {
     struct lusp_object_t* result = mkobject(LUSP_OBJECT_CLOSURE);
     
-	result->closure.closure = (struct lusp_vm_closure_t*)MEM_ARENA_NEW_ARRAY(&g_lusp_heap, struct lusp_vm_upval_t*, upval_count);
+	result->closure.closure = (struct lusp_vm_closure_t*)lusp_memory_allocate(sizeof(struct lusp_vm_upval_t*) * upval_count);
 	DL_ASSERT(result->closure.closure);
+	
     result->closure.code = code;
     return result;
 }

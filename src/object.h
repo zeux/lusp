@@ -73,8 +73,8 @@ struct lusp_object_t
 	};
 };
 
-bool lusp_internal_object_init();
-void lusp_internal_object_term();
+bool lusp_object_init();
+void lusp_object_term();
 
 struct lusp_object_t* lusp_mksymbol(const char* name);
 struct lusp_object_t* lusp_mkboolean(bool value);

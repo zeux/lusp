@@ -5,16 +5,13 @@
 #include <lusp/environment.h>
 
 #include <lusp/object.h>
-
-#include <mem/arena.h>
-
-extern struct mem_arena_t g_lusp_heap;
+#include <lusp/memory.h>
 
 static struct lusp_environment_slot_t* mkslot(struct lusp_environment_slot_t* next, struct lusp_object_t* name)
 {
 	DL_ASSERT(name && name->type == LUSP_OBJECT_SYMBOL);
 	
-    struct lusp_environment_slot_t* result = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_environment_slot_t);
+    struct lusp_environment_slot_t* result = (struct lusp_environment_slot_t*)lusp_memory_allocate(sizeof(struct lusp_environment_slot_t));
     DL_ASSERT(result);
     
     result->name = name;
@@ -37,7 +34,7 @@ struct lusp_environment_slot_t* find_slot(struct lusp_environment_t* env, struct
 
 struct lusp_environment_t* lusp_environment_create()
 {
-    struct lusp_environment_t* result = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_environment_t);
+    struct lusp_environment_t* result = (struct lusp_environment_t*)lusp_memory_allocate(sizeof(struct lusp_environment_t));
     DL_ASSERT(result);
     
     result->head = 0;

@@ -7,10 +7,7 @@
 #include <lusp/vm.h>
 #include <lusp/environment.h>
 #include <lusp/object.h>
-#include <lusp/jit.h>
-
-#include <core/memory.h>
-#include <mem/arena.h>
+#include <lusp/memory.h>
 
 extern struct mem_arena_t g_lusp_heap;
 
@@ -24,7 +21,7 @@ static inline struct lusp_vm_upval_t* mkupval(struct lusp_vm_upval_t** list, str
             return upval;
             
     // create new upval
-    struct lusp_vm_upval_t* result = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_vm_upval_t);
+    struct lusp_vm_upval_t* result = (struct lusp_vm_upval_t*)lusp_memory_allocate(sizeof(struct lusp_vm_upval_t));
     DL_ASSERT(result);
     
     result->ref = ref;

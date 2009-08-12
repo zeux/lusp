@@ -5,28 +5,21 @@
 #include <lusp/lusp.h>
 
 #include <lusp/object.h>
-
-#include <mem/arena.h>
-
-struct mem_arena_t g_lusp_heap;
+#include <lusp/memory.h>
 
 bool lusp_init(struct mem_arena_t* arena, unsigned int heap_size)
 {
-	// create heap
-	if (!mem_arena_create_subarena(&g_lusp_heap, arena, heap_size, 16)) return false;
+	// initialize memory
+	if (!lusp_memory_init(arena, heap_size)) return false;
 	
 	// initialize builtin objects
-	if (!lusp_internal_object_init()) return false;
+	if (!lusp_object_init()) return false;
 	
 	return true;
 }
 
 void lusp_term()
 {
-	lusp_internal_object_term();
-}
-
-unsigned int lusp_heap_get_size()
-{
-	return g_lusp_heap.size - g_lusp_heap.free_size;
+    lusp_memory_term();
+	lusp_object_term();
 }
