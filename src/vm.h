@@ -13,7 +13,8 @@ enum lusp_vm_opcode_t
 	LUSP_VMOP_GET_LOCAL,
 	LUSP_VMOP_SET_LOCAL,
 	LUSP_VMOP_GET_UPVAL,
-	LUSP_VMOP_SET_UPVAL,
+	LUSP_VMOP_GET_UPREF,
+	LUSP_VMOP_SET_UPREF,
 	LUSP_VMOP_GET_GLOBAL,
 	LUSP_VMOP_SET_GLOBAL,
 	LUSP_VMOP_PUSH,
@@ -43,11 +44,6 @@ struct lusp_vm_op_t
 		
 		struct
 		{
-			unsigned int index;
-		} getset_upval;
-		
-		struct
-		{
 			struct lusp_environment_slot_t* slot;
 		} getset_global;
 		
@@ -68,23 +64,27 @@ struct lusp_vm_op_t
 	};
 };
 
-struct lusp_vm_upval_t
+struct lusp_vm_upref_t
 {
     struct lusp_object_t** ref;
     
     union
     {
-        // for closed upval
+        // for closed upref
         struct lusp_object_t* object;
         
-        // for open upval
-        struct lusp_vm_upval_t* next;
+        // for open upref
+        struct lusp_vm_upref_t* next;
     };
 };
 
 struct lusp_vm_closure_t
 {
-	struct lusp_vm_upval_t* upvals[1];
+    union
+    {
+    	struct lusp_object_t* upvals[1];
+    	struct lusp_vm_upref_t* uprefs[1];
+    };
 };
 
 struct lusp_vm_bytecode_t;
@@ -96,7 +96,7 @@ struct lusp_vm_bytecode_t
     struct lusp_environment_t* env;
     
     unsigned int local_count;
-    unsigned int upval_count;
+    unsigned int upref_count;
 
 	struct lusp_vm_op_t* ops;
 	unsigned int op_count;
