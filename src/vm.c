@@ -80,6 +80,10 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, b
 		    dump_bytecode(op->create_closure.code, new_indent, deep);
 		} break;
 			
+		case LUSP_VMOP_CREATE_LIST:
+			printf("%s%02d: create_list %d\n", indent, i, op->create_list.index);
+			break;
+			
 		default:
 			printf("%s%02d: unknown\n", indent, i);
 		}

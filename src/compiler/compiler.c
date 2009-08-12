@@ -624,6 +624,16 @@ static void compile_closure_code(struct compiler_t* compiler, struct lusp_ast_no
         if (rest) break;
     }
     
+    // create list for rest
+    if (rest)
+    {
+        struct lusp_vm_op_t op;
+        
+        op.opcode = LUSP_VMOP_CREATE_LIST;
+        op.create_list.index = scope.bind_count - 1;
+        emit(compiler, op);
+    }
+    
     // compile body
     compile_list(compiler, body, false);
     

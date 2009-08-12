@@ -22,7 +22,8 @@ enum lusp_vm_opcode_t
 	LUSP_VMOP_JUMP,
 	LUSP_VMOP_JUMP_IF,
 	LUSP_VMOP_JUMP_IFNOT,
-	LUSP_VMOP_CREATE_CLOSURE
+	LUSP_VMOP_CREATE_CLOSURE,
+	LUSP_VMOP_CREATE_LIST
 };
 
 struct lusp_vm_op_t
@@ -60,6 +61,11 @@ struct lusp_vm_op_t
 		{
 		    struct lusp_vm_bytecode_t* code;
 		} create_closure;
+		
+		struct
+		{
+		    unsigned int index;
+		} create_list;
 	};
 };
 

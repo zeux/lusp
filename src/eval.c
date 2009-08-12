@@ -44,6 +44,24 @@ static inline void close_upvals(struct lusp_vm_upval_t* list)
     }
 }
 
+static inline struct lusp_object_t* create_list(struct lusp_object_t** begin, struct lusp_object_t** end)
+{
+    DL_ASSERT(begin <= end);
+    
+    struct lusp_object_t* head = 0;
+    struct lusp_object_t* tail = 0;
+    
+    for (struct lusp_object_t** i = begin; i != end; ++i)
+    {
+        struct lusp_object_t* cell = lusp_mkcons(*i, 0);
+        
+        if (tail) tail = tail->cons.cdr = cell;
+        else head = tail = cell;
+    }
+    
+    return head;
+}
+
 static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t** eval_stack, unsigned int arg_count)
 {
     struct lusp_vm_op_t* pc = code->ops;
@@ -155,6 +173,13 @@ static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_v
 				}
             }
         } break;
+        
+        case LUSP_VMOP_CREATE_LIST:
+            eval_stack[op.create_list.index] = create_list(eval_stack + op.create_list.index, eval_stack + arg_count);
+            break;
+            
+		default:
+		    DL_ASSERT(!"unexpected instruction");
         }
     }
 }
