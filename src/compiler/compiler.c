@@ -242,6 +242,143 @@ static void compile_call(struct compiler_t* compiler, struct lusp_ast_node_t* fu
 	emit(compiler, op);
 }
 
+struct do_var_t
+{
+    struct lusp_ast_node_t* var;
+    struct lusp_ast_node_t* init;
+    struct lusp_ast_node_t* step;
+};
+
+static unsigned int extract_do_var(struct compiler_t* compiler, struct lusp_ast_node_t* init, struct do_var_t* dest)
+{
+    unsigned int count = 0;
+    
+    for (struct lusp_ast_node_t* it = init; it; it = it->cons.cdr)
+    {
+        check(compiler, it->type == LUSP_AST_CONS, "do: malformed syntax");
+        
+        struct lusp_ast_node_t* vis = it->cons.car;
+        
+        check(compiler, vis && vis->type == LUSP_AST_CONS, "do: malformed syntax");
+        
+        struct lusp_ast_node_t* var = vis->cons.car;
+        struct lusp_ast_node_t* is = vis->cons.cdr;
+        
+        check(compiler, var && var->type == LUSP_AST_SYMBOL, "do: malformed syntax");
+        check(compiler, is && is->type == LUSP_AST_CONS, "do: malformed syntax");
+        
+        struct lusp_ast_node_t* init = is->cons.car;
+        struct lusp_ast_node_t* s = is->cons.cdr;
+        
+        check(compiler, s && s->type == LUSP_AST_CONS && !s->cons.cdr, "do: malformed syntax");
+        
+        struct lusp_ast_node_t* step = s->cons.car;
+        
+        // $$$ buffer overflow check
+        dest[count].var = var;
+        dest[count].init = init;
+        dest[count].step = step;
+        
+        count++;
+    }
+    
+    return count;
+}
+
+static void compile_do(struct compiler_t* compiler, struct lusp_ast_node_t* args)
+{
+	check(compiler, args && args->type == LUSP_AST_CONS && args->cons.cdr && args->cons.cdr->type == LUSP_AST_CONS, "do: malformed syntax");
+	
+	struct lusp_ast_node_t* init = args->cons.car;
+	struct lusp_ast_node_t* test = args->cons.cdr->cons.car;
+	struct lusp_ast_node_t* code = args->cons.cdr->cons.cdr;
+	
+	check(compiler, test && test->type == LUSP_AST_CONS, "do: malformed syntax");
+	
+	// extract do variables
+	struct do_var_t vars[1024];
+	unsigned int var_count = extract_do_var(compiler, init, vars);
+	
+    // add new scope
+    struct scope_t scope;
+    scope.compiler = compiler;
+    scope.parent = compiler->scope;
+    scope.bind_count = 0;
+
+    // process init steps
+    for (unsigned int i = 0; i < var_count; ++i)
+    {
+        check(compiler, !find_bind_local(&scope, vars[i].var->symbol), "do: duplicate variables detected");
+
+        // evaluate init step
+        compile(compiler, vars[i].init);
+        
+        // add new variable to scope
+        unsigned int index = compiler->local_count++;
+
+        scope.binds[scope.bind_count].symbol = vars[i].var->symbol;
+        scope.binds[scope.bind_count].index = index;
+        scope.bind_count++;
+        
+        // assign variable
+        struct lusp_vm_op_t op;
+        
+        op.opcode = LUSP_VMOP_SET_LOCAL;
+        op.getset_local.index = index;
+        emit(compiler, op);
+    }
+    
+    // push scope
+    compiler->scope = &scope;
+    
+    // loop label
+    unsigned int loop_op = compiler->op_count;
+    
+    // evaluate test
+    compile(compiler, test->cons.car);
+    
+    // test label
+    unsigned int test_op = compiler->op_count;
+    
+    // jump to the exit if test is true
+    struct lusp_vm_op_t op;
+    
+    op.opcode = LUSP_VMOP_JUMP_IF;
+    op.jump.offset = 0;
+    emit(compiler, op);
+    
+    // evaluate commands
+    compile_list(compiler, code, false);
+    
+    // evaluate steps
+    for (unsigned int i = 0; i < var_count; ++i)
+    {
+        compile(compiler, vars[i].step);
+        
+        // assign variable
+        struct lusp_vm_op_t op;
+        
+        op.opcode = LUSP_VMOP_SET_LOCAL;
+        op.getset_local.index = scope.binds[i].index;
+        emit(compiler, op);
+    }
+    
+    // loop
+    op.opcode = LUSP_VMOP_JUMP;
+    op.jump.offset = 0;
+    emit(compiler, op);
+    
+    // fixup jumps
+    fixup_jump(compiler, compiler->op_count - 1, loop_op);
+    fixup_jump(compiler, test_op, compiler->op_count);
+    
+    // evaluate exit expression
+    compile_list(compiler, test->cons.cdr, false);
+    
+    // pop scope
+    compiler->scope = scope.parent;
+}
+
 static void compile_whenunless(struct compiler_t* compiler, struct lusp_ast_node_t* args, bool unless)
 {
 	check(compiler, args && args->type == LUSP_AST_CONS, "when/unless: malformed syntax");
@@ -567,6 +704,9 @@ static void compile_cons(struct compiler_t* compiler, struct lusp_ast_node_t* no
 		
 	case LUSP_AST_SYMBOL_UNLESS:
 		return compile_whenunless(compiler, args, true);
+		
+	case LUSP_AST_SYMBOL_DO:
+		return compile_do(compiler, args);
 		
 	default:
 		check(compiler, false, "invalid function call");

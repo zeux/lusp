@@ -25,6 +25,7 @@ struct symbols_t
 	struct lusp_object_t* if_;
 	struct lusp_object_t* when;
 	struct lusp_object_t* unless;
+	struct lusp_object_t* do_;
 };
 
 struct parser_t
@@ -86,6 +87,7 @@ static inline struct lusp_ast_node_t* mksymbol(struct parser_t* parser, const ch
 	else if (symbol == symbols->if_) result->type = LUSP_AST_SYMBOL_IF;
 	else if (symbol == symbols->when) result->type = LUSP_AST_SYMBOL_WHEN;
 	else if (symbol == symbols->unless) result->type = LUSP_AST_SYMBOL_UNLESS;
+	else if (symbol == symbols->do_) result->type = LUSP_AST_SYMBOL_DO;
 	
 	return result;
 }
@@ -209,7 +211,8 @@ struct lusp_ast_node_t* lusp_parse(struct lusp_lexer_t* lexer, struct mem_arena_
 		lusp_mksymbol("quote"), lusp_mksymbol("quasiquote"), lusp_mksymbol("unquote"),
 		lusp_mksymbol("unquote-splicing"), lusp_mksymbol("begin"), lusp_mksymbol("define"),
 		lusp_mksymbol("lambda"), lusp_mksymbol("let"), lusp_mksymbol("let*"), lusp_mksymbol("letrec"),
-		lusp_mksymbol("set!"), lusp_mksymbol("if"), lusp_mksymbol("when"), lusp_mksymbol("unless")
+		lusp_mksymbol("set!"), lusp_mksymbol("if"), lusp_mksymbol("when"), lusp_mksymbol("unless"),
+		lusp_mksymbol("do")
 	};
 
 	// create parser 

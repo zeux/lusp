@@ -22,7 +22,8 @@ enum lusp_ast_node_type_t
 	LUSP_AST_SYMBOL_SET,
 	LUSP_AST_SYMBOL_IF,
 	LUSP_AST_SYMBOL_WHEN,
-	LUSP_AST_SYMBOL_UNLESS
+	LUSP_AST_SYMBOL_UNLESS,
+	LUSP_AST_SYMBOL_DO
 };
 
 struct lusp_ast_node_t
