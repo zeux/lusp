@@ -36,7 +36,7 @@ static struct lusp_object_t read_list(struct lusp_lexer_t* lexer)
 			struct lusp_object_t atom = read_atom(lexer);
 
 			// append atom
-			*tail.cons.cdr = atom;
+			tail.cons[1] = atom;
 
 			// check that the atom was actually last one
 			check(lexer, lexer->lexeme == LUSP_LEXEME_CLOSE_BRACE, "invalid dotted pair");
@@ -48,7 +48,7 @@ static struct lusp_object_t read_list(struct lusp_lexer_t* lexer)
 		struct lusp_object_t atom = read_atom(lexer);
 		
 		// append atom
-		if (tail.type != LUSP_OBJECT_NULL) tail = *tail.cons.cdr = lusp_mkcons(atom, lusp_mknull());
+		if (tail.type != LUSP_OBJECT_NULL) tail = tail.cons[1] = lusp_mkcons(atom, lusp_mknull());
 		else head = tail = lusp_mkcons(atom, lusp_mknull());
 	}
 	

@@ -77,7 +77,7 @@ static inline void check(struct compiler_t* compiler, bool condition, const char
 static inline struct binding_t* find_bind_local(struct scope_t* scope, struct lusp_object_t symbol)
 {
 	for (unsigned int i = 0; i < scope->bind_count; ++i)
-		if (scope->binds[i].symbol.symbol.name == symbol.symbol.name)
+		if (scope->binds[i].symbol.symbol == symbol.symbol)
 			return &scope->binds[i];
 	
 	return 0;
@@ -138,7 +138,7 @@ static void compile_object(struct compiler_t* compiler, struct lusp_object_t obj
 	struct lusp_object_t o = lusp_mkcons(object, object);
 	
 	op.opcode = LUSP_VMOP_GET_OBJECT;
-	op.get_object.object = o.cons.car;
+	op.get_object.object = o.cons;
 	emit(compiler, op);
 }
 

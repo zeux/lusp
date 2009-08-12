@@ -73,21 +73,21 @@ static inline struct lusp_ast_node_t* mksymbol(struct parser_t* parser, const ch
 	// correct type for special symbols
 	struct symbols_t* symbols = parser->symbols;
 	
-	if (symbol.symbol.name == symbols->quote.symbol.name) result->type = LUSP_AST_SYMBOL_QUOTE;
-	else if (symbol.symbol.name == symbols->quasiquote.symbol.name) result->type = LUSP_AST_SYMBOL_QUASIQUOTE;
-	else if (symbol.symbol.name == symbols->unquote.symbol.name) result->type = LUSP_AST_SYMBOL_UNQUOTE;
-	else if (symbol.symbol.name == symbols->unquote_splicing.symbol.name) result->type = LUSP_AST_SYMBOL_UNQUOTE_SPLICING;
-	else if (symbol.symbol.name == symbols->begin.symbol.name) result->type = LUSP_AST_SYMBOL_BEGIN;
-	else if (symbol.symbol.name == symbols->define.symbol.name) result->type = LUSP_AST_SYMBOL_DEFINE;
-	else if (symbol.symbol.name == symbols->lambda.symbol.name) result->type = LUSP_AST_SYMBOL_LAMBDA;
-	else if (symbol.symbol.name == symbols->let.symbol.name) result->type = LUSP_AST_SYMBOL_LET;
-	else if (symbol.symbol.name == symbols->letseq.symbol.name) result->type = LUSP_AST_SYMBOL_LETSEQ;
-	else if (symbol.symbol.name == symbols->letrec.symbol.name) result->type = LUSP_AST_SYMBOL_LETREC;
-	else if (symbol.symbol.name == symbols->set.symbol.name) result->type = LUSP_AST_SYMBOL_SET;
-	else if (symbol.symbol.name == symbols->if_.symbol.name) result->type = LUSP_AST_SYMBOL_IF;
-	else if (symbol.symbol.name == symbols->when.symbol.name) result->type = LUSP_AST_SYMBOL_WHEN;
-	else if (symbol.symbol.name == symbols->unless.symbol.name) result->type = LUSP_AST_SYMBOL_UNLESS;
-	else if (symbol.symbol.name == symbols->do_.symbol.name) result->type = LUSP_AST_SYMBOL_DO;
+	if (symbol.symbol == symbols->quote.symbol) result->type = LUSP_AST_SYMBOL_QUOTE;
+	else if (symbol.symbol == symbols->quasiquote.symbol) result->type = LUSP_AST_SYMBOL_QUASIQUOTE;
+	else if (symbol.symbol == symbols->unquote.symbol) result->type = LUSP_AST_SYMBOL_UNQUOTE;
+	else if (symbol.symbol == symbols->unquote_splicing.symbol) result->type = LUSP_AST_SYMBOL_UNQUOTE_SPLICING;
+	else if (symbol.symbol == symbols->begin.symbol) result->type = LUSP_AST_SYMBOL_BEGIN;
+	else if (symbol.symbol == symbols->define.symbol) result->type = LUSP_AST_SYMBOL_DEFINE;
+	else if (symbol.symbol == symbols->lambda.symbol) result->type = LUSP_AST_SYMBOL_LAMBDA;
+	else if (symbol.symbol == symbols->let.symbol) result->type = LUSP_AST_SYMBOL_LET;
+	else if (symbol.symbol == symbols->letseq.symbol) result->type = LUSP_AST_SYMBOL_LETSEQ;
+	else if (symbol.symbol == symbols->letrec.symbol) result->type = LUSP_AST_SYMBOL_LETREC;
+	else if (symbol.symbol == symbols->set.symbol) result->type = LUSP_AST_SYMBOL_SET;
+	else if (symbol.symbol == symbols->if_.symbol) result->type = LUSP_AST_SYMBOL_IF;
+	else if (symbol.symbol == symbols->when.symbol) result->type = LUSP_AST_SYMBOL_WHEN;
+	else if (symbol.symbol == symbols->unless.symbol) result->type = LUSP_AST_SYMBOL_UNLESS;
+	else if (symbol.symbol == symbols->do_.symbol) result->type = LUSP_AST_SYMBOL_DO;
 	
 	return result;
 }

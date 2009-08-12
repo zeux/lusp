@@ -2,7 +2,7 @@
 
 #pragma once
 
-struct lusp_object_t;
+#include <lusp/object.h>
 
 struct lusp_object_t lusp_eval(struct lusp_object_t object);
 

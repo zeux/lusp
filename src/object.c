@@ -11,19 +11,7 @@
 #include <core/memory.h>
 #include <core/hash.h>
 
-struct lusp_object_t g_lusp_true;
-struct lusp_object_t g_lusp_false;
-
-static struct lusp_object_t* g_lusp_symbols[1024];
-
-static inline struct lusp_object_t* mkobject(enum lusp_object_type_t type)
-{
-	struct lusp_object_t* result = (struct lusp_object_t*)lusp_memory_allocate(sizeof(struct lusp_object_t));
-	DL_ASSERT(result);
-	
-	result->type = type;
-	return result;
-}
+static struct lusp_symbol_t* g_lusp_symbols[1024];
 
 static inline const char* mkstring(const char* value)
 {
@@ -39,13 +27,6 @@ static inline const char* mkstring(const char* value)
 
 bool lusp_object_init()
 {
-	// initialize builtin boolean values
-	g_lusp_true.type = LUSP_OBJECT_BOOLEAN;
-	g_lusp_true.boolean.value = true;
-
-	g_lusp_false.type = LUSP_OBJECT_BOOLEAN;
-	g_lusp_false.boolean.value = false;
-
 	// intialize symbol hash table
 	memset(g_lusp_symbols, 0, sizeof(g_lusp_symbols));
 	
@@ -65,31 +46,38 @@ struct lusp_object_t lusp_mknull()
 
 struct lusp_object_t lusp_mksymbol(const char* name)
 {
+	struct lusp_object_t result;
+	result.type = LUSP_OBJECT_SYMBOL;
+	
 	// compute hash
 	const unsigned int hash_mask = sizeof(g_lusp_symbols) / sizeof(g_lusp_symbols[0]) - 1;
 	unsigned int hash = core_hash_string(name) & hash_mask;
 	
 	// table lookup
-	for (struct lusp_object_t* object = g_lusp_symbols[hash]; object; object = object->symbol.next)
-		if (str_is_equal(name, object->symbol.name))
-			return *object;
+	for (struct lusp_symbol_t* symbol = g_lusp_symbols[hash]; symbol; symbol = symbol->next)
+		if (str_is_equal(name, symbol->name))
+		{
+			result.symbol = symbol;
+			return result;
+		}
 			
-	// construct new object
-	struct lusp_object_t* result = mkobject(LUSP_OBJECT_SYMBOL);
-	result->symbol.name = mkstring(name);
+	// construct new symbol
+	struct lusp_symbol_t* symbol = (struct lusp_symbol_t*)lusp_memory_allocate(sizeof(struct lusp_symbol_t));
+	symbol->name = mkstring(name);
 	
-	// insert object into hash table
-	result->symbol.next = g_lusp_symbols[hash];
-	g_lusp_symbols[hash] = result;
+	// insert symbol into hash table
+	symbol->next = g_lusp_symbols[hash];
+	g_lusp_symbols[hash] = symbol;
 	
-	return *result;
+	result.symbol = symbol;
+	return result;
 }
 
 struct lusp_object_t lusp_mkboolean(bool value)
 {
     struct lusp_object_t result;
     result.type = LUSP_OBJECT_BOOLEAN;
-    result.boolean.value = value;
+    result.boolean = value;
     return result;
 }
 
@@ -97,7 +85,7 @@ struct lusp_object_t lusp_mkinteger(int value)
 {
     struct lusp_object_t result;
     result.type = LUSP_OBJECT_INTEGER;
-    result.integer.value = value;
+    result.integer = value;
     return result;
 }
 
@@ -105,7 +93,7 @@ struct lusp_object_t lusp_mkreal(float value)
 {
     struct lusp_object_t result;
     result.type = LUSP_OBJECT_REAL;
-    result.real.value = value;
+    result.real = value;
     return result;
 }
 
@@ -113,7 +101,7 @@ struct lusp_object_t lusp_mkstring(const char* value)
 {
     struct lusp_object_t result;
     result.type = LUSP_OBJECT_STRING;
-    result.string.value = mkstring(value);
+    result.string = mkstring(value);
     return result;
 }
 
@@ -121,10 +109,9 @@ struct lusp_object_t lusp_mkcons(struct lusp_object_t car, struct lusp_object_t 
 {
 	struct lusp_object_t result;
 	result.type = LUSP_OBJECT_CONS;
-	result.cons.car = mkobject(LUSP_OBJECT_CONS);
-	result.cons.cdr = mkobject(LUSP_OBJECT_CONS);
-	*result.cons.car = car;
-	*result.cons.cdr = cdr;
+	result.cons = (struct lusp_object_t*)lusp_memory_allocate(sizeof(struct lusp_object_t) * 2);
+	result.cons[0] = car;
+	result.cons[1] = cdr;
 	return result;
 }
 
@@ -133,10 +120,10 @@ struct lusp_object_t lusp_mkclosure(struct lusp_vm_bytecode_t* code, unsigned in
     struct lusp_object_t result;
     result.type = LUSP_OBJECT_CLOSURE;
     
-	result.closure.closure = (struct lusp_vm_closure_t*)lusp_memory_allocate(sizeof(struct lusp_vm_upval_t*) * upval_count);
-	DL_ASSERT(result.closure.closure);
+	result.closure = (struct lusp_vm_closure_t*)lusp_memory_allocate(sizeof(struct lusp_vm_closure_t) - sizeof(struct lusp_vm_upval_t*) + sizeof(struct lusp_vm_upval_t*) * upval_count);
+	DL_ASSERT(result.closure);
 	
-    result.closure.code = code;
+    result.closure->code = code;
     return result;
 }
 
@@ -144,6 +131,6 @@ struct lusp_object_t lusp_mkprocedure(lusp_procedure_t code)
 {
     struct lusp_object_t result;
     result.type = LUSP_OBJECT_PROCEDURE;
-    result.procedure.code = code;
+    result.procedure = code;
     return result;
 }

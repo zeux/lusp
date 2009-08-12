@@ -14,9 +14,9 @@ static struct lusp_environment_slot_t* mkslot(struct lusp_environment_slot_t* ne
     struct lusp_environment_slot_t* result = (struct lusp_environment_slot_t*)lusp_memory_allocate(sizeof(struct lusp_environment_slot_t));
     DL_ASSERT(result);
     
-    result->name = name;
-    result->value = lusp_mknull();
+    result->name = name.symbol;
     result->next = next;
+    result->value = lusp_mknull();
     
     return result;
 }
@@ -26,7 +26,7 @@ struct lusp_environment_slot_t* find_slot(struct lusp_environment_t* env, struct
 	DL_ASSERT(name.type == LUSP_OBJECT_SYMBOL);
 	
     for (struct lusp_environment_slot_t* slot = env->head; slot; slot = slot->next)
-        if (slot->name.symbol.name == name.symbol.name)
+        if (slot->name == name.symbol)
 			return slot;
     
     return 0;

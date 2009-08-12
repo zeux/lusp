@@ -19,54 +19,26 @@ enum lusp_object_type_t
 	LUSP_OBJECT_PROCEDURE
 };
 
+struct lusp_symbol_t
+{
+	const char* name;
+	struct lusp_symbol_t* next;
+};
+
 struct lusp_object_t
 {
 	enum lusp_object_type_t type;
 	
 	union
 	{
-		struct
-		{
-			bool value;
-		} boolean;
-		
-		struct
-		{
-			const char* name;
-			struct lusp_object_t* next;
-		} symbol;
-		
-		struct
-		{
-			int value;
-		} integer;
-		
-		struct
-		{
-			float value;
-		} real;
-		
-		struct
-		{
-			const char* value;
-		} string;
-		
-		struct
-		{
-			struct lusp_object_t* car;
-			struct lusp_object_t* cdr;
-		} cons;
-		
-		struct
-		{
-			struct lusp_vm_closure_t* closure;
-			struct lusp_vm_bytecode_t* code;
-		} closure;
-		
-		struct
-		{
-		    void* code;
-		} procedure;
+		struct lusp_symbol_t* symbol;
+		bool boolean;
+		int integer;
+		float real;
+		const char* string;
+		struct lusp_object_t* cons;
+		struct lusp_vm_closure_t* closure;
+		void* procedure;
 	};
 };
 

@@ -84,12 +84,13 @@ struct lusp_vm_upval_t
     };
 };
 
+struct lusp_vm_bytecode_t;
+
 struct lusp_vm_closure_t
 {
+	struct lusp_vm_bytecode_t* code;
 	struct lusp_vm_upval_t* upvals[1];
 };
-
-struct lusp_vm_bytecode_t;
 
 typedef struct lusp_object_t (*lusp_vm_evaluator_t)(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t* eval_stack, unsigned int arg_count);
 
