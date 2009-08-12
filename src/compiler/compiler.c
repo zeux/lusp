@@ -37,7 +37,7 @@ struct scope_t
 	unsigned int bind_count;
 };
 
-struct upref_t
+struct upval_t
 {
 	struct scope_t* scope;
 	struct binding_t* binding;
@@ -54,9 +54,9 @@ struct compiler_t
 	// local variables
 	unsigned int local_count;
 	
-	// uprefs
-	struct upref_t uprefs[1024];
-	unsigned int upref_count;
+	// upvalues
+	struct upval_t upvals[1024];
+	unsigned int upval_count;
 	
 	// opcode buffer
 	struct lusp_vm_op_t ops[1024];
@@ -101,21 +101,21 @@ static inline struct binding_t* find_bind(struct compiler_t* compiler, struct lu
 	return 0;
 }
 
-static inline unsigned int find_upref(struct compiler_t* compiler, struct scope_t* scope, struct binding_t* binding)
+static inline unsigned int find_upval(struct compiler_t* compiler, struct scope_t* scope, struct binding_t* binding)
 {
-	// look for an existing upref
-	for (unsigned int i = 0; i < compiler->upref_count; ++i)
-		if (compiler->uprefs[i].binding == binding)
+	// look for an existing upval
+	for (unsigned int i = 0; i < compiler->upval_count; ++i)
+		if (compiler->upvals[i].binding == binding)
 		{
-			DL_ASSERT(compiler->uprefs[i].scope == scope);
+			DL_ASSERT(compiler->upvals[i].scope == scope);
 			return i;
 		}
 		
 	// add new upval
-	compiler->uprefs[compiler->upref_count].binding = binding;
-	compiler->uprefs[compiler->upref_count].scope = scope;
+	compiler->upvals[compiler->upval_count].binding = binding;
+	compiler->upvals[compiler->upval_count].scope = scope;
 	
-	return compiler->upref_count++;
+	return compiler->upval_count++;
 }
 
 static inline void emit(struct compiler_t* compiler, struct lusp_vm_op_t op)
@@ -165,8 +165,8 @@ static void compile_bind_getset(struct compiler_t* compiler, struct scope_t* sco
 		// upvalue
 		struct lusp_vm_op_t op;
 	
-		op.opcode = set ? LUSP_VMOP_SET_UPREF : LUSP_VMOP_GET_UPREF;
-		op.getset_local.index = find_upref(compiler, scope, bind);
+		op.opcode = set ? LUSP_VMOP_SET_UPVAL : LUSP_VMOP_GET_UPVAL;
+		op.getset_local.index = find_upval(compiler, scope, bind);
 		emit(compiler, op);
 	}
 }
@@ -445,10 +445,10 @@ static void compile_closure(struct compiler_t* parent, struct lusp_ast_node_t* a
 	op.create_closure.code = bytecode;
 	emit(parent, op);
 	
-	// set uprefs
-	for (unsigned int i = 0; i < compiler.upref_count; ++i)
+	// set upvalues
+	for (unsigned int i = 0; i < compiler.upval_count; ++i)
 	{
-		struct upref_t u = compiler.uprefs[i];
+		struct upval_t u = compiler.upvals[i];
 		
 		compile_bind_getset(parent, u.scope, u.binding, false);
 	}
@@ -642,7 +642,7 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, st
     compiler->env = parent->env;
     compiler->scope = parent->scope;
     compiler->local_count = 0;
-    compiler->upref_count = 0;
+    compiler->upval_count = 0;
     compiler->op_count = 0;
     compiler->error = parent->error;
     
@@ -656,7 +656,7 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, st
     struct lusp_vm_bytecode_t* code = MEM_ARENA_NEW(&g_lusp_heap, struct lusp_vm_bytecode_t);
     code->env = parent->env;
     code->local_count = compiler->local_count;
-    code->upref_count = compiler->upref_count;
+    code->upval_count = compiler->upval_count;
     code->ops = ops;
     code->op_count = compiler->op_count;
 	code->jit = 0;
@@ -686,7 +686,7 @@ struct lusp_object_t* lusp_compile(struct lusp_environment_t* env, struct lusp_a
 	struct lusp_vm_bytecode_t* bytecode = create_closure(&compiler, &parent, 0, node);
 	
 	// check correctness
-	DL_ASSERT(compiler.upref_count == 0);
+	DL_ASSERT(compiler.upval_count == 0);
 	
 	// create resulting closure
 	return lusp_mkclosure(bytecode, 0);

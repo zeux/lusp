@@ -14,7 +14,7 @@
 
 static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, bool deep)
 {
-	printf("%s%d locals, %d uprefs\n", indent, code->local_count, code->upref_count);
+	printf("%s%d locals, %d upvals\n", indent, code->local_count, code->upval_count);
 	
 	for (unsigned int i = 0; i < code->op_count; ++i)
 	{
@@ -34,12 +34,8 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, b
 			break;
 			
 		case LUSP_VMOP_GET_UPVAL:
-			printf("%s%02d: get_upval %d\n", indent, i, op->getset_local.index);
-			break;
-			
-		case LUSP_VMOP_GET_UPREF:
-		case LUSP_VMOP_SET_UPREF:
-			printf("%s%02d: %s_upref %d\n", indent, i, (op->opcode == LUSP_VMOP_SET_UPREF) ? "set" : "get", op->getset_local.index);
+		case LUSP_VMOP_SET_UPVAL:
+			printf("%s%02d: %s_upval %d\n", indent, i, (op->opcode == LUSP_VMOP_SET_UPVAL) ? "set" : "get", op->getset_local.index);
 			break;
 			
 		case LUSP_VMOP_GET_GLOBAL:
