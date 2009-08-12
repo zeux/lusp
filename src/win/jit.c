@@ -1,7 +1,5 @@
 // DeepLight Engine (c) Zeux 2006-2009
 
-#if 0
-
 #include <core/common.h>
 
 #include <lusp/jit.h>
@@ -9,59 +7,104 @@
 #include <lusp/vm.h>
 #include <lusp/environment.h>
 #include <lusp/object.h>
+#include <lusp/memory.h>
 #include <lusp/win/assembler.h>
-
-#include <mem/arena.h>
 
 #include <windows.h>
 
-extern struct mem_arena_t g_lusp_heap;
-
-extern struct lusp_object_t g_lusp_false;
-
 void* allocate_code()
 {
-	void* result = mem_arena_allocate(&g_lusp_heap, 16*1024, 4096);
+	return VirtualAlloc(0, 16*1024, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+}
+
+// ecx = ref, edx = unused
+static struct lusp_vm_upval_t* __fastcall mkupval(struct lusp_object_t* ref, unsigned int unused, struct lusp_vm_upval_t** list)
+{
+	(void)unused;
+	
+	// look for ref in list
+	for (struct lusp_vm_upval_t* upval = *list; upval; upval = upval->next)
+		if (upval->ref == ref)
+			return upval;
+
+	// create new upval
+	struct lusp_vm_upval_t* result = (struct lusp_vm_upval_t*)lusp_memory_allocate(sizeof(struct lusp_vm_upval_t));
 	DL_ASSERT(result);
-	
-	DWORD flags;
-	VirtualProtect(result, 16*1024, PAGE_EXECUTE_READWRITE, &flags);
-	
+
+	result->ref = ref;
+	result->next = *list;
+	*list = result;
+
 	return result;
 }
 
-// registers:
-// eax: value
-// ebx: bind_frame
-// ecx: used for internal calculations
-// edx: eval_stack
-// esi: used for internal calculations
-
-static inline uint8_t* compile_prologue(uint8_t* code)
+static void __fastcall close_upvals(struct lusp_vm_upval_t* list)
 {
-	// push ebx
+	while (list)
+	{
+		struct lusp_vm_upval_t* next = list->next;
+
+		list->object = *list->ref;
+		list->ref = &list->object;
+
+		list = next;
+	}
+}
+
+// registers:
+// eax:edx: value
+// ebx: closure
+// esi: eval_stack
+// edi: eval_stack_top
+// ecx: used for internal calculations
+
+static inline uint8_t* compile_prologue(uint8_t* code, unsigned int local_count)
+{
+	// store volatile registers to stack
 	PUSH_REG(EBX);
-	
-	// push esi
+	PUSH_REG(EBP);
 	PUSH_REG(ESI);
+	PUSH_REG(EDI);
 	
-	// since we pushed two values on stack, evaluator arguments are available at [esp + 12], [esp + 16], etc.
+	// store upval list on stack
+	PUSH_IMM8(0);
 	
-	// mov ebx, dword ptr [esp + 16]
-	MOV_REG_PESP_OFF8(EBX, 16);
+	// assuming the following declaration, load arguments from stack:
+	// typedef struct lusp_object_t (*lusp_vm_evaluator_t)(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t* eval_stack, unsigned int arg_count);
+	const unsigned int stack_offset = 24;
 	
-	// mov edx, dword ptr [esp + 20]
-	MOV_REG_PESP_OFF8(EDX, 20);
+	// load eval_stack into esi
+	MOV_REG_PREG_OFF8(ESI, ESP, stack_offset + 8);
+	
+	// load closure into ebx
+	MOV_REG_PREG_OFF8(EBX, ESP, stack_offset + 4);
+	
+	// initially eval_stack_top = eval_stack + local_count
+	LEA_REG_PREG_OFF32(EDI, ESI, local_count * sizeof(struct lusp_object_t));
 	
 	return code;
 }
 
 static inline uint8_t* compile_epilogue(uint8_t* code)
 {
-	// pop esi
-	POP_REG(ESI);
+	// get upval list
+	POP_REG(ECX);
 	
-	// pop ebx
+	// save return value
+	MOV_REG_REG(ESI, EAX);
+	MOV_REG_REG(EDI, EDX);
+	
+	// close upval list
+	CALL_FUNC(close_upvals);
+	
+	// restore return value
+	MOV_REG_REG(EAX, ESI);
+	MOV_REG_REG(EDX, EDI);
+	
+	// load volatile registers from stack
+	POP_REG(EDI);
+	POP_REG(ESI);
+	POP_REG(EBP);
 	POP_REG(EBX);
 	
 	return code;
@@ -69,36 +112,52 @@ static inline uint8_t* compile_epilogue(uint8_t* code)
 
 static inline uint8_t* compile_get_object(uint8_t* code, struct lusp_vm_op_t op)
 {
-	// mov eax, imm32
-	MOV_REG_IMM32(EAX, op.get_object.object);
+	// load object from fixed address
+	MOV_REG_PIMM(EAX, &op.get_object.object->type);
+	MOV_REG_PIMM(EDX, &op.get_object.object->object);
 	
 	return code;
 }
 
 static inline uint8_t* compile_getset_local(uint8_t* code, struct lusp_vm_op_t op)
 {
-	unsigned int offset = op.getset_local.index * sizeof(struct lusp_object_t*) +
-		offsetof(struct lusp_vm_bind_frame_t, binds);
+	// object is on stack
+	size_t offset = op.getset_local.index * sizeof(struct lusp_object_t);
 			
-	if (op.getset_local.depth == 0)
+	if (op.opcode == LUSP_VMOP_GET_LOCAL)
 	{
-		// mov eax, dword ptr [ebx + offset]
-		// mov dword ptr [ebx + offset], eax
-		(op.opcode == LUSP_VMOP_GET_LOCAL) ? (MOV_REG_PREG_OFF32(EAX, EBX, offset)) : (MOV_PREG_OFF32_REG(EBX, offset, EAX));
+		MOV_REG_PREG_OFF32(EAX, ESI, offset);
+		MOV_REG_PREG_OFF32(EDX, ESI, offset + 4);
 	}
 	else
 	{
-		DL_STATIC_ASSERT(offsetof(struct lusp_vm_bind_frame_t, parent) == 0);
-		
-		// mov ecx, dword ptr [ebx]
-		MOV_REG_PREG(ECX, EBX);
+		MOV_PREG_OFF32_REG(ESI, offset, EAX);
+		MOV_PREG_OFF32_REG(ESI, offset + 4, EDX);
+	}
+	
+	return code;
+}
 
-		// mov ecx, dword ptr [ecx]
-		for (unsigned int i = 1; i < op.getset_local.depth; ++i) MOV_REG_PREG(ECX, ECX);
-
-		// mov eax, dword ptr [ecx + offset]
-		// mov dword ptr [ecx + offset], eax
-		(op.opcode == LUSP_VMOP_GET_LOCAL) ? (MOV_REG_PREG_OFF32(EAX, ECX, offset)) : (MOV_PREG_OFF32_REG(ECX, offset, EAX));
+static inline uint8_t* compile_getset_upval(uint8_t* code, struct lusp_vm_op_t op)
+{
+	// object is in upvalue
+	size_t offset = offsetof(struct lusp_vm_closure_t, upvals[op.getset_local.index]);
+	
+	// load upval address
+	DL_STATIC_ASSERT(offsetof(struct lusp_vm_upval_t, ref) == 0);
+	
+	MOV_REG_PREG_OFF32(ECX, EBX, offset);
+	MOV_REG_PREG(ECX, ECX);
+			
+	if (op.opcode == LUSP_VMOP_GET_UPVAL)
+	{
+		MOV_REG_PREG(EAX, ECX);
+		MOV_REG_PREG_OFF8(EDX, ECX, 4);
+	}
+	else
+	{
+		MOV_PREG_REG(ECX, EAX);
+		MOV_PREG_OFF8_REG(ECX, 4, EDX);
 	}
 	
 	return code;
@@ -106,10 +165,19 @@ static inline uint8_t* compile_getset_local(uint8_t* code, struct lusp_vm_op_t o
 
 static inline uint8_t* compile_getset_global(uint8_t* code, struct lusp_vm_op_t op)
 {
-	// mov eax, dword ptr [&slot->value]
-	// mov dword ptr [&slot->value], eax
-	struct lusp_object_t** value = &op.getset_global.slot->value;
-	(op.opcode == LUSP_VMOP_GET_GLOBAL) ? (MOV_EAX_ADDR(value)) : (MOV_ADDR_EAX(value));
+	// object is in environment slot
+	struct lusp_object_t* value = &op.getset_global.slot->value;
+	
+	if (op.opcode == LUSP_VMOP_GET_GLOBAL)
+	{
+		MOV_REG_PIMM(EAX, &value->type);
+		MOV_REG_PIMM(EDX, &value->object);
+	}
+	else
+	{
+		MOV_PIMM_REG(&value->type, EAX);
+		MOV_PIMM_REG(&value->object, EDX);
+	}
 	
 	return code;
 }
@@ -118,96 +186,39 @@ static inline uint8_t* compile_push(uint8_t* code, struct lusp_vm_op_t op)
 {
 	(void)op;
 	
-	// mov dword ptr [edx], eax
-	MOV_PREG_REG(EDX, EAX);
+	// store object to stack top
+	MOV_PREG_REG(EDI, EAX);
+	MOV_PREG_OFF8_REG(EDI, 4, EDX);
 
-	// add edx, sizeof(struct lusp_object_t*)
-	ADD_EDX_IMM8(sizeof(struct lusp_object_t*));
-	
-	return code;
-}
-
-static inline uint8_t* compile_bind(uint8_t* code, struct lusp_vm_op_t op)
-{
-	unsigned int bind_size = op.bind.count * sizeof(struct lusp_object_t*);
-	
-	// mov ecx, heap.current
-	MOV_ECX_ADDR(&g_lusp_heap.current);
-
-	// add heap.current, bind_size + offsetof(struct lusp_vm_bind_frame_t, binds)
-	ADD_ADDR_IMM32(&g_lusp_heap.current, bind_size + offsetof(struct lusp_vm_bind_frame_t, binds));
-
-	// mov dword ptr [ecx], ebx
-	DL_STATIC_ASSERT(offsetof(struct lusp_vm_bind_frame_t, parent) == 0);
-	MOV_PREG_REG(ECX, EBX);
-	
-	// mov dword ptr [ecx + offset], op.bind.count
-	MOV_PREG_OFF8_IMM32(ECX, offsetof(struct lusp_vm_bind_frame_t, count), op.bind.count);
-	
-	// sub edx, bind_size
-	SUB_EDX_IMM32(bind_size);
-
-	// mov esi, dword ptr [edx + offset]
-	// mov dword ptr [ecx + offset], esi
-	for (unsigned int j = 0; j < op.bind.count; ++j)
-	{
-		MOV_REG_PREG_OFF32(ESI, EDX, j * sizeof(struct lusp_object_t*));
-		MOV_PREG_OFF32_REG(ECX, j * sizeof(struct lusp_object_t*) + offsetof(struct lusp_vm_bind_frame_t, binds), ESI);
-	}
-
-	// mov ebx, ecx
-	MOV_REG_REG(EBX, ECX);
-	
-	return code;
-}
-
-static inline uint8_t* compile_unbind(uint8_t* code, struct lusp_vm_op_t op)
-{
-	(void)op;
-	
-	// mov ebx, dword ptr [ebx]
-	DL_STATIC_ASSERT(offsetof(struct lusp_vm_bind_frame_t, parent) == 0);
-	MOV_REG_PREG(EBX, EBX);
+	// increment stack pointer
+	ADD_REG_IMM8(EDI, sizeof(struct lusp_object_t));
 	
 	return code;
 }
 
 static inline uint8_t* compile_call(uint8_t* code, struct lusp_vm_op_t op, struct lusp_environment_t* env)
 {
-	// cmp dword ptr [eax], LUSP_OBJECT_PROCEDURE
+	// is this a function?
 	DL_STATIC_ASSERT(offsetof(struct lusp_object_t, type) == 0);
-	CMP_PREG_IMM8(EAX, LUSP_OBJECT_PROCEDURE);
+	CMP_REG_IMM8(EAX, LUSP_OBJECT_FUNCTION);
 
-	// jne closure
+	// it's not, jump to closure call
 	uint8_t* closure;
 	JNE_IMM8(closure);
 
-	// push count
+	// adjust stack pointer
+	SUB_REG_IMM32(EDI, op.call.count * sizeof(struct lusp_object_t));
+	
+	// push arguments (environment pointer, argument array, call count)
 	PUSH_IMM32(op.call.count);
-
-	// sub edx, count * sizeof(struct lusp_object_t*)
-	SUB_EDX_IMM32(op.call.count * sizeof(struct lusp_object_t*));
-
-	// push edx
-	PUSH_REG(EDX);
-
-	// push env
+	PUSH_REG(EDI);
 	PUSH_IMM32(env);
 
-	// mov eax, dword ptr [eax + offset]
-	MOV_REG_PREG_OFF8(EAX, EAX, offsetof(struct lusp_object_t, procedure.code));
+	// call function by pointer
+	CALL_REG(EDX);
 
-	// call eax
-	CALL_REG(EAX);
-
-	// pop edx
-	POP_REG(EDX);
-
-	// pop edx
-	POP_REG(EDX);
-
-	// pop ecx
-	POP_REG(ECX);
+	// pop arguments
+	ADD_REG_IMM8(ESP, 12);
 
 	// jmp end
 	uint8_t* end;
@@ -216,41 +227,24 @@ static inline uint8_t* compile_call(uint8_t* code, struct lusp_vm_op_t op, struc
 	// closure:
 	LABEL8(closure);
 	
-	// push count
+	// adjust stack pointer
+	SUB_REG_IMM32(EDI, op.call.count * sizeof(struct lusp_object_t));
+	
+	// load bytecode pointer
+	MOV_REG_PREG_OFF8(ECX, EDX, offsetof(struct lusp_vm_closure_t, code));
+	
+	// push arguments (bytecode, closure, argument array, call count)
 	PUSH_IMM32(op.call.count);
-	
-	// push edx
+	PUSH_REG(EDI);
 	PUSH_REG(EDX);
+	PUSH_REG(ECX);
 	
-	// push closure.frame
-	PUSH_PREG_OFF8(EAX, offsetof(struct lusp_object_t, closure.frame));
+	// call evaluator
+	MOV_REG_PREG_OFF8(ECX, ECX, offsetof(struct lusp_vm_bytecode_t, evaluator));
+	CALL_REG(ECX);
 	
-	// mov eax, dword ptr [eax + offset]
-	MOV_REG_PREG_OFF8(EAX, EAX, offsetof(struct lusp_object_t, closure.code));
-
-	// push eax
-	PUSH_REG(EAX);
-	
-	// mov eax, dword ptr [eax + offset]
-	MOV_REG_PREG_OFF8(EAX, EAX, offsetof(struct lusp_vm_bytecode_t, evaluator));
-
-	// call eax
-	CALL_REG(EAX);
-
-	// pop edx
-	POP_REG(EDX);
-	
-	// pop edx
-	POP_REG(EDX);
-	
-	// pop edx
-	POP_REG(EDX);
-
-	// sub edx, count * sizeof(struct lusp_object_t*)
-	SUB_EDX_IMM32(op.call.count * sizeof(struct lusp_object_t*));
-	
-	// pop ecx
-	POP_REG(ECX);
+	// pop arguments
+	ADD_REG_IMM8(ESP, 16);
 	
 	// end:
 	LABEL8(end);
@@ -283,50 +277,87 @@ static inline uint8_t* compile_jump(uint8_t* code, struct lusp_vm_op_t op)
 
 static inline uint8_t* compile_jump_cond(uint8_t* code, struct lusp_vm_op_t op)
 {
-	// cmp eax, &g_lusp_false
-	CMP_EAX_IMM32(&g_lusp_false);
-
-	// je label
-	// jne label
+	// merge type and boolean value in single value
+	MOV_REG_REG(ECX, EDX);
+	SHL_REG_IMM8(ECX, 24);
+	ADD_REG_REG(ECX, EAX);
+	
+	// compare with unique 'false' value and jump
+	CMP_REG_IMM8(ECX, LUSP_OBJECT_BOOLEAN);
 	(op.opcode == LUSP_VMOP_JUMP_IFNOT) ? (JE_IMM32(0)) : (JNE_IMM32(0));
 
 	return code;
 }
 
-static inline uint8_t* compile_create_closure(uint8_t* code, struct lusp_vm_op_t op)
+static inline uint8_t* compile_create_closure(uint8_t* code, struct lusp_vm_op_t op, struct lusp_vm_op_t* upval_ops)
 {
-	// mov eax, heap.current
-	MOV_EAX_ADDR(&g_lusp_heap.current);
-
-	// add heap.current, sizeof(struct lusp_object_t)
-	ADD_ADDR_IMM32(&g_lusp_heap.current, sizeof(struct lusp_object_t));
-
-	// mov dword ptr [eax], LUSP_OBJECT_CLOSURE
-	DL_ASSERT(offsetof(struct lusp_object_t, type) == 0);
-	MOV_PEAX_IMM32(LUSP_OBJECT_CLOSURE);
-
-	// mov dword ptr [eax + offset], ebx
-	MOV_PREG_OFF8_REG(EAX, offsetof(struct lusp_object_t, closure.frame), EBX);
-
-	// mov dword ptr [eax + offset], op.create_closure.code
-	MOV_PREG_OFF8_IMM32(EAX, offsetof(struct lusp_object_t, closure.code), op.create_closure.code);
-	
 	// $$$: remove this
 	lusp_compile_jit(op.create_closure.code);
+	
+	unsigned int upval_count = op.create_closure.code->upval_count;
 
+	// push arguments (bytecode, upvalue count)
+	PUSH_IMM32(upval_count);
+	PUSH_IMM32(op.create_closure.code);
+	
+	// create closure
+	CALL_FUNC(lusp_mkclosure);
+	
+	// pop arguments
+	ADD_REG_IMM8(ESP, 8);
+	
+	// if closure has no upvalues, we're done
+	if (upval_count == 0) return code;
+	
+	// save closure pointer
+	MOV_REG_REG(EBP, EDX);
+	
+	// set upvalues
+	for (unsigned int i = 0; i < upval_count; ++i)
+	{
+		struct lusp_vm_op_t op = upval_ops[i];
+
+		switch (op.opcode)
+		{
+		case LUSP_VMOP_GET_LOCAL:
+			// push arguments (ref, list)
+			LEA_REG_PREG_OFF32(ECX, ESI, op.getset_local.index * sizeof(struct lusp_object_t));
+			PUSH_REG(ESP);
+			
+			// make upval
+			CALL_FUNC(mkupval);
+			break;
+
+		case LUSP_VMOP_GET_UPVAL:
+			// get upval from closure upval list
+			MOV_REG_PREG_OFF32(EAX, EBX, offsetof(struct lusp_vm_closure_t, upvals[op.getset_local.index]));
+			break;
+
+		default:
+			DL_ASSERT(!"unexpected instruction");
+		}
+		
+		// store upval
+		MOV_PREG_OFF32_REG(EBP, offsetof(struct lusp_vm_closure_t, upvals[i]), EAX);
+	}
+	
+	// fix closure
+	MOV_REG_IMM32(EAX, LUSP_OBJECT_CLOSURE);
+	MOV_REG_REG(EDX, EBP);
+	
 	return code;
 }
 
-static void compile(uint8_t* code, struct lusp_environment_t* env, struct lusp_vm_op_t* ops, unsigned int count)
+static void compile(uint8_t* code, struct lusp_environment_t* env, struct lusp_vm_op_t* ops, unsigned int op_count, unsigned int local_count)
 {
 	uint8_t* labels[1024];
 	uint8_t* jumps[1024];
 	
 	// prologue
-	code = compile_prologue(code);
+	code = compile_prologue(code, local_count);
 	
 	// first pass: compile code
-	for (unsigned int i = 0; i < count; ++i)
+	for (unsigned int i = 0; i < op_count; ++i)
 	{
 		struct lusp_vm_op_t op = ops[i];
 		
@@ -344,7 +375,12 @@ static void compile(uint8_t* code, struct lusp_environment_t* env, struct lusp_v
 		case LUSP_VMOP_SET_LOCAL:
 			code = compile_getset_local(code, op);
 			break;
-			
+
+		case LUSP_VMOP_GET_UPVAL:
+		case LUSP_VMOP_SET_UPVAL:
+			code = compile_getset_upval(code, op);
+			break;
+
 		case LUSP_VMOP_GET_GLOBAL:
 		case LUSP_VMOP_SET_GLOBAL:
 			code = compile_getset_global(code, op);
@@ -354,26 +390,14 @@ static void compile(uint8_t* code, struct lusp_environment_t* env, struct lusp_v
 			code = compile_push(code, op);
 			break;
 			
-		case LUSP_VMOP_BIND:
-			code = compile_bind(code, op);
-			break;
-			
-		case LUSP_VMOP_BIND_REST:
-			DL_ASSERT(false); // not supported yet
-			break;
-			
-		case LUSP_VMOP_UNBIND:
-			code = compile_unbind(code, op);
-			break;
-			
 		case LUSP_VMOP_CALL:
 			code = compile_call(code, op, env);
 			break;
-			
+
 		case LUSP_VMOP_RETURN:
 			code = compile_ret(code, op);
 			break;
-			
+
 		case LUSP_VMOP_JUMP:
 			code = compile_jump(code, op);
 			jumps[i] = code - sizeof(uint32_t);
@@ -384,24 +408,27 @@ static void compile(uint8_t* code, struct lusp_environment_t* env, struct lusp_v
 			code = compile_jump_cond(code, op);
 			jumps[i] = code - sizeof(uint32_t);
 			break;
-			
+
 		case LUSP_VMOP_CREATE_CLOSURE:
-			code = compile_create_closure(code, op);
-			break;
+			code = compile_create_closure(code, op, &ops[i + 1]);
 			
+			// skip upvalue instructions
+			i += op.create_closure.code->upval_count;
+			break;
+
 		default:
 			DL_ASSERT(false);
 		}
 	}
 	
 	// second pass: fixup labels
-	for (unsigned int i = 0; i < count; ++i)
+	for (unsigned int i = 0; i < op_count; ++i)
 	{
 		struct lusp_vm_op_t op = ops[i];
 		
-		if (op.opcode != LUSP_VMOP_JUMP && op.opcode != LUSP_VMOP_JUMP_IFNOT) continue;
+		if (op.opcode != LUSP_VMOP_JUMP && op.opcode != LUSP_VMOP_JUMP_IF && op.opcode != LUSP_VMOP_JUMP_IFNOT) continue;
 		
-		LABEL32(jumps[i], labels[op.jump.index]);
+		LABEL32(jumps[i], labels[i + op.jump.offset]);
 	}
 }
 
@@ -411,9 +438,7 @@ void lusp_compile_jit(struct lusp_vm_bytecode_t* code)
 	
 	code->jit = allocate_code();
 	
-	compile((unsigned char*)code->jit, code->env, code->ops, code->count);
+	compile((unsigned char*)code->jit, code->env, code->ops, code->op_count, code->local_count);
 	
 	code->evaluator = (lusp_vm_evaluator_t)code->jit;
 }
-
-#endif
