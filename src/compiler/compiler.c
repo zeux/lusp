@@ -689,5 +689,5 @@ struct lusp_object_t* lusp_compile(struct lusp_environment_t* env, struct lusp_a
 	DL_ASSERT(compiler.upref_count == 0);
 	
 	// create resulting closure
-	return lusp_mkclosure(bytecode);
+	return lusp_mkclosure(bytecode, 0);
 }

@@ -114,11 +114,11 @@ struct lusp_object_t* lusp_mkcons(struct lusp_object_t* car, struct lusp_object_
 	return result;
 }
 
-struct lusp_object_t* lusp_mkclosure(struct lusp_vm_bytecode_t* code)
+struct lusp_object_t* lusp_mkclosure(struct lusp_vm_bytecode_t* code, unsigned int upref_count)
 {
     struct lusp_object_t* result = mkobject(LUSP_OBJECT_CLOSURE);
     
-	result->closure.closure = (struct lusp_vm_closure_t*)MEM_ARENA_NEW_ARRAY(&g_lusp_heap, struct lusp_vm_upref_t*, code->upref_count);
+	result->closure.closure = (struct lusp_vm_closure_t*)MEM_ARENA_NEW_ARRAY(&g_lusp_heap, struct lusp_vm_upref_t*, upref_count);
 	DL_ASSERT(result->closure.closure);
     result->closure.code = code;
     return result;

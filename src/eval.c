@@ -57,40 +57,40 @@ static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_v
     
     for (;;)
     {
-		struct lusp_vm_op_t* op = pc++;
+		struct lusp_vm_op_t op = *pc++;
 		
-        switch (op->opcode)
+        switch (op.opcode)
         {
         case LUSP_VMOP_GET_OBJECT:
-            value = op->get_object.object;
+            value = op.get_object.object;
             break;
             
         case LUSP_VMOP_GET_LOCAL:
-			value = eval_stack[op->getset_local.index];
+			value = eval_stack[op.getset_local.index];
 	        break;
             
         case LUSP_VMOP_SET_LOCAL:
-			eval_stack[op->getset_local.index] = value;
+			eval_stack[op.getset_local.index] = value;
 	        break;
             
         case LUSP_VMOP_GET_UPVAL:
-			value = closure->upvals[op->getset_local.index];
+			value = closure->upvals[op.getset_local.index];
 			break;
 			
         case LUSP_VMOP_GET_UPREF:
-			value = *closure->uprefs[op->getset_local.index]->ref;
+			value = *closure->uprefs[op.getset_local.index]->ref;
 			break;
 			
         case LUSP_VMOP_SET_UPREF:
-			*closure->uprefs[op->getset_local.index]->ref = value;
+			*closure->uprefs[op.getset_local.index]->ref = value;
 			break;
 			
         case LUSP_VMOP_GET_GLOBAL:
-            value = op->getset_global.slot->value;
+            value = op.getset_global.slot->value;
             break;
             
         case LUSP_VMOP_SET_GLOBAL:
-            op->getset_global.slot->value = value;
+            op.getset_global.slot->value = value;
             break;
             
         case LUSP_VMOP_PUSH:
@@ -102,14 +102,14 @@ static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_v
             
             if (value->type == LUSP_OBJECT_CLOSURE)
             {
-                unsigned int count = op->call.count;
+                unsigned int count = op.call.count;
                 
                 eval_stack_top -= count;
 				value = value->closure.code->evaluator(value->closure.code, value->closure.closure, eval_stack_top, count);
             }
             else
             {
-                unsigned int count = op->call.count;
+                unsigned int count = op.call.count;
                 
                 eval_stack_top -= count;
                 value = (value->procedure.code)(code->env, eval_stack_top, count);
@@ -121,40 +121,45 @@ static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_v
             return value;
             
         case LUSP_VMOP_JUMP:
-            pc = op + op->jump.offset;
+            pc = pc + op.jump.offset - 1;
             break;
             
         case LUSP_VMOP_JUMP_IF:
-            if (value != &g_lusp_false) pc = op + op->jump.offset;
+            if (value != &g_lusp_false) pc = pc + op.jump.offset - 1;
             break;
             
         case LUSP_VMOP_JUMP_IFNOT:
-            if (value == &g_lusp_false) pc = op + op->jump.offset;
+            if (value == &g_lusp_false) pc = pc + op.jump.offset - 1;
             break;
             
         case LUSP_VMOP_CREATE_CLOSURE:
-            value = lusp_mkclosure(op->create_closure.code);
+        {
+            unsigned int upref_count = op.create_closure.code->upref_count;
+            
+            value = lusp_mkclosure(op.create_closure.code, upref_count);
+            
+            struct lusp_vm_closure_t* newclosure = value->closure.closure;
             
             // set uprefs
-            for (unsigned int i = 0; i < op->create_closure.code->upref_count; ++i)
+            for (unsigned int i = 0; i < upref_count; ++i)
             {
-				struct lusp_vm_op_t* op = pc++;
+				struct lusp_vm_op_t op = *pc++;
 				
-				switch (op->opcode)
+				switch (op.opcode)
 				{
 				case LUSP_VMOP_GET_LOCAL:
-				    value->closure.closure->uprefs[i] = mkupref(&uprefs, &eval_stack[op->getset_local.index]);
+				    newclosure->uprefs[i] = mkupref(&uprefs, &eval_stack[op.getset_local.index]);
 				    break;
 				    
 				case LUSP_VMOP_GET_UPREF:
-				    value->closure.closure->uprefs[i] = closure->uprefs[op->getset_local.index];
+				    newclosure->uprefs[i] = closure->uprefs[op.getset_local.index];
 				    break;
 				    
 				default:
 				    DL_ASSERT(!"unexpected instruction");
 				}
             }
-	        break;
+        } break;
 	        
         default:
             DL_ASSERT(!"unexpected instruction");

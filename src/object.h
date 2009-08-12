@@ -82,5 +82,5 @@ struct lusp_object_t* lusp_mkinteger(int value);
 struct lusp_object_t* lusp_mkreal(float value);
 struct lusp_object_t* lusp_mkstring(const char* value);
 struct lusp_object_t* lusp_mkcons(struct lusp_object_t* car, struct lusp_object_t* cdr);
-struct lusp_object_t* lusp_mkclosure(struct lusp_vm_bytecode_t* code);
+struct lusp_object_t* lusp_mkclosure(struct lusp_vm_bytecode_t* code, unsigned int upref_count);
 struct lusp_object_t* lusp_mkprocedure(lusp_procedure_t code);
