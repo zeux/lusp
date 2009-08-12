@@ -7,7 +7,7 @@
 #include <lusp/vm.h>
 #include <lusp/environment.h>
 #include <lusp/object.h>
-#include <lusp/memory.h>
+#include <lusp/evalutils.h>
 #include <lusp/win/assembler.h>
 
 #include <windows.h>
@@ -18,37 +18,21 @@ void* allocate_code()
 }
 
 // ecx = ref, edx = unused
-static struct lusp_vm_upval_t* __fastcall mkupval(struct lusp_object_t* ref, unsigned int unused, struct lusp_vm_upval_t** list)
+static struct lusp_vm_upval_t* __fastcall jit_mkupval(struct lusp_object_t* ref, unsigned int unused, struct lusp_vm_upval_t** list)
 {
 	(void)unused;
 	
-	// look for ref in list
-	for (struct lusp_vm_upval_t* upval = *list; upval; upval = upval->next)
-		if (upval->ref == ref)
-			return upval;
-
-	// create new upval
-	struct lusp_vm_upval_t* result = (struct lusp_vm_upval_t*)lusp_memory_allocate(sizeof(struct lusp_vm_upval_t));
-	DL_ASSERT(result);
-
-	result->ref = ref;
-	result->next = *list;
-	*list = result;
-
-	return result;
+	return mkupval(list, ref);
 }
 
-static void __fastcall close_upvals(struct lusp_vm_upval_t* list)
+static void __fastcall jit_close_upvals(struct lusp_vm_upval_t* list)
 {
-	while (list)
-	{
-		struct lusp_vm_upval_t* next = list->next;
+	return close_upvals(list);
+}
 
-		list->object = *list->ref;
-		list->ref = &list->object;
-
-		list = next;
-	}
+static struct lusp_object_t __fastcall jit_create_list(struct lusp_object_t* end, struct lusp_object_t* begin)
+{
+	return create_list(begin, end);
 }
 
 // registers:
@@ -73,6 +57,9 @@ static inline uint8_t* compile_prologue(uint8_t* code, unsigned int local_count)
 	// typedef struct lusp_object_t (*lusp_vm_evaluator_t)(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t* eval_stack, unsigned int arg_count);
 	const unsigned int stack_offset = 24;
 	
+	// load arg_count into ecx
+	MOV_REG_PREG_OFF8(ECX, ESP, stack_offset + 12);
+	
 	// load eval_stack into esi
 	MOV_REG_PREG_OFF8(ESI, ESP, stack_offset + 8);
 	
@@ -95,7 +82,7 @@ static inline uint8_t* compile_epilogue(uint8_t* code)
 	MOV_REG_REG(EDI, EDX);
 	
 	// close upval list
-	CALL_FUNC(close_upvals);
+	CALL_FUNC(jit_close_upvals);
 	
 	// restore return value
 	MOV_REG_REG(EAX, ESI);
@@ -325,7 +312,7 @@ static inline uint8_t* compile_create_closure(uint8_t* code, struct lusp_vm_op_t
 			PUSH_REG(ESP);
 			
 			// make upval
-			CALL_FUNC(mkupval);
+			CALL_FUNC(jit_mkupval);
 			break;
 
 		case LUSP_VMOP_GET_UPVAL:
@@ -344,6 +331,27 @@ static inline uint8_t* compile_create_closure(uint8_t* code, struct lusp_vm_op_t
 	// fix closure
 	MOV_REG_IMM32(EAX, LUSP_OBJECT_CLOSURE);
 	MOV_REG_REG(EDX, EBP);
+	
+	return code;
+}
+
+static inline uint8_t* compile_create_list(uint8_t* code, struct lusp_vm_op_t op)
+{
+	size_t offset = op.create_list.index * sizeof(struct lusp_object_t);
+	
+	// compute end of range
+	SHL_REG_IMM8(ECX, 3);
+	ADD_REG_REG(ECX, ESI);
+	
+	// compute start of range
+	LEA_REG_PREG_OFF32(EDX, ESI, offset);
+	
+	// create list
+	CALL_FUNC(jit_create_list);
+	
+	// store result
+	MOV_PREG_OFF32_REG(ESI, offset, EAX);
+	MOV_PREG_OFF32_REG(ESI, offset + 4, EDX);
 	
 	return code;
 }
@@ -414,6 +422,10 @@ static void compile(uint8_t* code, struct lusp_environment_t* env, struct lusp_v
 			
 			// skip upvalue instructions
 			i += op.create_closure.code->upval_count;
+			break;
+			
+		case LUSP_VMOP_CREATE_LIST:
+			code = compile_create_list(code, op);
 			break;
 
 		default:
