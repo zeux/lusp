@@ -127,10 +127,18 @@ struct lusp_object_t lusp_mkclosure(struct lusp_vm_bytecode_t* code, unsigned in
     return result;
 }
 
-struct lusp_object_t lusp_mkprocedure(lusp_procedure_t code)
+struct lusp_object_t lusp_mkfunction(lusp_function_t code)
 {
     struct lusp_object_t result;
-    result.type = LUSP_OBJECT_PROCEDURE;
-    result.procedure = code;
+    result.type = LUSP_OBJECT_FUNCTION;
+    result.function = code;
+    return result;
+}
+
+struct lusp_object_t lusp_mkobject(void* object)
+{
+    struct lusp_object_t result;
+    result.type = LUSP_OBJECT_OBJECT;
+    result.object = object;
     return result;
 }

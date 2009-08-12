@@ -109,7 +109,7 @@ static struct lusp_object_t eval(struct lusp_vm_bytecode_t* code, struct lusp_vm
             break;
             
         case LUSP_VMOP_CALL:
-            DL_ASSERT(value.type == LUSP_OBJECT_CLOSURE || value.type == LUSP_OBJECT_PROCEDURE);
+            DL_ASSERT(value.type == LUSP_OBJECT_CLOSURE || value.type == LUSP_OBJECT_FUNCTION);
             
             if (value.type == LUSP_OBJECT_CLOSURE)
             {
@@ -126,7 +126,7 @@ static struct lusp_object_t eval(struct lusp_vm_bytecode_t* code, struct lusp_vm
                 unsigned int count = op.call.count;
                 
                 eval_stack_top -= count;
-                value = ((lusp_procedure_t)value.procedure)(code->env, eval_stack_top, count);
+                value = ((lusp_function_t)value.function)(code->env, eval_stack_top, count);
             }
             break;
             

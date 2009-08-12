@@ -85,8 +85,12 @@ void lusp_write(struct lusp_object_t object)
 		printf("#<closure:%p>", object.closure);
 		break;
 		
-	case LUSP_OBJECT_PROCEDURE:
-		printf("#<procedure:%p>", object.procedure);
+	case LUSP_OBJECT_FUNCTION:
+		printf("#<function:%p>", object.function);
+		break;
+		
+	case LUSP_OBJECT_OBJECT:
+		printf("#<object:%p>", object.object);
 		break;
 		
 	default:
