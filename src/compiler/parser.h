@@ -2,7 +2,7 @@
 
 #pragma once
 
-struct lusp_object_t;
+#include <lusp/object.h>
 
 enum lusp_ast_node_type_t
 {
@@ -33,8 +33,8 @@ struct lusp_ast_node_t
 	
 	union
 	{
-		struct lusp_object_t* literal;
-		struct lusp_object_t* symbol;
+		struct lusp_object_t literal;
+		struct lusp_object_t symbol;
 		
 		struct
 		{

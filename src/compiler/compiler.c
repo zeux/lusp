@@ -21,7 +21,7 @@ struct compiler_t;
 
 struct binding_t
 {
-	struct lusp_object_t* symbol;
+	struct lusp_object_t symbol;
 	unsigned int index;
 };
 
@@ -74,16 +74,16 @@ static inline void check(struct compiler_t* compiler, bool condition, const char
 	}
 }
 
-static inline struct binding_t* find_bind_local(struct scope_t* scope, struct lusp_object_t* symbol)
+static inline struct binding_t* find_bind_local(struct scope_t* scope, struct lusp_object_t symbol)
 {
 	for (unsigned int i = 0; i < scope->bind_count; ++i)
-		if (scope->binds[i].symbol == symbol)
+		if (scope->binds[i].symbol.symbol.name == symbol.symbol.name)
 			return &scope->binds[i];
 	
 	return 0;
 }
 
-static inline struct binding_t* find_bind(struct compiler_t* compiler, struct lusp_object_t* symbol, struct scope_t** scope)
+static inline struct binding_t* find_bind(struct compiler_t* compiler, struct lusp_object_t symbol, struct scope_t** scope)
 {
 	for (struct scope_t* current = compiler->scope; current; current = current->parent)
 	{
@@ -131,12 +131,14 @@ static inline void fixup_jump(struct compiler_t* compiler, unsigned int jump, un
 static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, struct compiler_t* parent, struct lusp_ast_node_t* args, struct lusp_ast_node_t* body);
 static void compile(struct compiler_t* compiler, struct lusp_ast_node_t* node);
 
-static void compile_object(struct compiler_t* compiler, struct lusp_object_t* object)
+static void compile_object(struct compiler_t* compiler, struct lusp_object_t object)
 {
 	struct lusp_vm_op_t op;
 	
+	struct lusp_object_t o = lusp_mkcons(object, object);
+	
 	op.opcode = LUSP_VMOP_GET_OBJECT;
-	op.get_object.object = object;
+	op.get_object.object = o.cons.car;
 	emit(compiler, op);
 }
 
@@ -144,7 +146,7 @@ static void compile_literal(struct compiler_t* compiler, struct lusp_ast_node_t*
 {
 	DL_ASSERT(!node || node->type == LUSP_AST_LITERAL);
 	
-	compile_object(compiler, node ? node->literal : 0);
+	compile_object(compiler, node ? node->literal : lusp_mknull());
 }
 
 static void compile_bind_getset(struct compiler_t* compiler, struct scope_t* scope, struct binding_t* bind, bool set)
@@ -169,9 +171,9 @@ static void compile_bind_getset(struct compiler_t* compiler, struct scope_t* sco
 	}
 }
 
-static void compile_symbol_getset(struct compiler_t* compiler, struct lusp_object_t* symbol, bool set)
+static void compile_symbol_getset(struct compiler_t* compiler, struct lusp_object_t symbol, bool set)
 {
-	DL_ASSERT(symbol && symbol->type == LUSP_OBJECT_SYMBOL);
+	DL_ASSERT(symbol.type == LUSP_OBJECT_SYMBOL);
 	
 	struct scope_t* scope;
 	struct binding_t* bind = find_bind(compiler, symbol, &scope);
@@ -609,7 +611,7 @@ static void compile_define(struct compiler_t* compiler, struct lusp_ast_node_t* 
 		"define: function declaration has to start with symbol");
 	
 	// get actual symbol
-	struct lusp_object_t* symbol = (car->type == LUSP_AST_SYMBOL) ? car->symbol : car->cons.car->symbol;
+	struct lusp_object_t symbol = (car->type == LUSP_AST_SYMBOL) ? car->symbol : car->cons.car->symbol;
 	
 	// compile closure/value
 	if (car->type == LUSP_AST_CONS)
@@ -629,9 +631,9 @@ static void compile_define(struct compiler_t* compiler, struct lusp_ast_node_t* 
 	emit(compiler, op);
 }
 
-static struct lusp_object_t* compile_quote_helper(struct compiler_t* compiler, struct lusp_ast_node_t* node)
+static struct lusp_object_t compile_quote_helper(struct compiler_t* compiler, struct lusp_ast_node_t* node)
 {
-	if (!node) return 0;
+	if (!node) return lusp_mknull();
 	
 	switch (node->type)
 	{
@@ -715,7 +717,7 @@ static void compile_cons(struct compiler_t* compiler, struct lusp_ast_node_t* no
 
 static void compile(struct compiler_t* compiler, struct lusp_ast_node_t* node)
 {
-	if (!node) return compile_object(compiler, 0);
+	if (!node) return compile_object(compiler, lusp_mknull());
 	
 	switch (node->type)
 	{
@@ -753,7 +755,7 @@ static void compile_closure_code(struct compiler_t* compiler, struct lusp_ast_no
         
         rest = (arg->type == LUSP_AST_SYMBOL);
         
-        struct lusp_object_t* symbol = (arg->type == LUSP_AST_CONS) ? arg->cons.car->symbol : arg->symbol;
+        struct lusp_object_t symbol = (arg->type == LUSP_AST_CONS) ? arg->cons.car->symbol : arg->symbol;
         
         check(compiler, !find_bind_local(&scope, symbol), "lambda: duplicate arguments detected");
 
@@ -820,12 +822,12 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, st
     return code;
 }
 
-struct lusp_object_t* lusp_compile(struct lusp_environment_t* env, struct lusp_ast_node_t* node)
+struct lusp_object_t lusp_compile(struct lusp_environment_t* env, struct lusp_ast_node_t* node)
 {
 	// setup error handling facilities
 	jmp_buf buf;
 	
-	if (setjmp(buf)) return 0;
+	if (setjmp(buf)) return lusp_mknull();
 	
 	// create compiler 
 	struct compiler_t parent;

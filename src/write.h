@@ -4,4 +4,4 @@
 
 struct lusp_object_t;
 
-void lusp_write(struct lusp_object_t* object);
+void lusp_write(struct lusp_object_t object);

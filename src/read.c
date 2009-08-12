@@ -12,16 +12,16 @@ static inline void check(struct lusp_lexer_t* lexer, bool condition, const char*
 	if (!condition) lexer->error_handler(lexer, message);
 }
 
-static struct lusp_object_t* read_atom(struct lusp_lexer_t* lexer);
+static struct lusp_object_t read_atom(struct lusp_lexer_t* lexer);
 
-static struct lusp_object_t* read_list(struct lusp_lexer_t* lexer)
+static struct lusp_object_t read_list(struct lusp_lexer_t* lexer)
 {
 	// skip open brace
 	DL_ASSERT(lexer->lexeme == LUSP_LEXEME_OPEN_BRACE);
 	lusp_lexer_next(lexer);
 	
-	struct lusp_object_t* head = 0;
-	struct lusp_object_t* tail = 0;
+	struct lusp_object_t head = lusp_mknull();
+	struct lusp_object_t tail = lusp_mknull();
 	
 	// read a list of atoms
 	while (lexer->lexeme != LUSP_LEXEME_CLOSE_BRACE)
@@ -29,14 +29,14 @@ static struct lusp_object_t* read_list(struct lusp_lexer_t* lexer)
 		if (lexer->lexeme == LUSP_LEXEME_DOT)
 		{
 			// read dotted pair
-			check(lexer, tail != 0, "invalid dotted pair");
+			check(lexer, tail.type == LUSP_OBJECT_CONS, "invalid dotted pair");
 			
 			// read last atom
 			lusp_lexer_next(lexer);
-			struct lusp_object_t* atom = read_atom(lexer);
+			struct lusp_object_t atom = read_atom(lexer);
 
 			// append atom
-			tail->cons.cdr = atom;
+			*tail.cons.cdr = atom;
 
 			// check that the atom was actually last one
 			check(lexer, lexer->lexeme == LUSP_LEXEME_CLOSE_BRACE, "invalid dotted pair");
@@ -45,11 +45,11 @@ static struct lusp_object_t* read_list(struct lusp_lexer_t* lexer)
 		}
 		
 		// read atom
-		struct lusp_object_t* atom = read_atom(lexer);
+		struct lusp_object_t atom = read_atom(lexer);
 		
 		// append atom
-		if (tail) tail = tail->cons.cdr = lusp_mkcons(atom, 0);
-		else head = tail = lusp_mkcons(atom, 0);
+		if (tail.type != LUSP_OBJECT_NULL) tail = *tail.cons.cdr = lusp_mkcons(atom, lusp_mknull());
+		else head = tail = lusp_mkcons(atom, lusp_mknull());
 	}
 	
 	// skip closing brace
@@ -59,19 +59,19 @@ static struct lusp_object_t* read_list(struct lusp_lexer_t* lexer)
 	return head;
 }
 
-static inline struct lusp_object_t* next_lexeme(struct lusp_lexer_t* lexer, struct lusp_object_t* result)
+static inline struct lusp_object_t next_lexeme(struct lusp_lexer_t* lexer, struct lusp_object_t result)
 {
 	lusp_lexer_next(lexer);
 	return result;
 }
 
-static inline struct lusp_object_t* read_symbol_list(struct lusp_lexer_t* lexer, const char* symbol)
+static inline struct lusp_object_t read_symbol_list(struct lusp_lexer_t* lexer, const char* symbol)
 {
 	lusp_lexer_next(lexer);
-	return lusp_mkcons(lusp_mksymbol(symbol), lusp_mkcons(read_atom(lexer), 0));
+	return lusp_mkcons(lusp_mksymbol(symbol), lusp_mkcons(read_atom(lexer), lusp_mknull()));
 }
 
-static struct lusp_object_t* read_atom(struct lusp_lexer_t* lexer)
+static struct lusp_object_t read_atom(struct lusp_lexer_t* lexer)
 {
 	switch (lexer->lexeme)
 	{
@@ -107,11 +107,11 @@ static struct lusp_object_t* read_atom(struct lusp_lexer_t* lexer)
 		
 	default:
 		check(lexer, false, "unexpected token");
-		return 0;
+		return lusp_mknull();
 	}
 }
 
-struct lusp_object_t* lusp_read(struct lusp_lexer_t* lexer)
+struct lusp_object_t lusp_read(struct lusp_lexer_t* lexer)
 {
 	return read_atom(lexer);
 }

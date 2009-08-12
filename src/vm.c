@@ -24,7 +24,7 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, b
 		{
 		case LUSP_VMOP_GET_OBJECT:
 			printf("%s%02d: get_object %p [ ", indent, i, op->get_object.object);
-			lusp_write(op->get_object.object);
+			lusp_write(*op->get_object.object);
 			printf(" ]\n");
 			break;
 			
@@ -41,7 +41,7 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, b
 		case LUSP_VMOP_GET_GLOBAL:
 		case LUSP_VMOP_SET_GLOBAL:
 			printf("%s%02d: %s_global %p [ %s ]\n", indent, i, (op->opcode == LUSP_VMOP_SET_GLOBAL) ? "set" : "get",
-				op->getset_global.slot, op->getset_global.slot->name->symbol.name);
+				op->getset_global.slot, op->getset_global.slot->name.symbol.name);
 			break;
 			
 		case LUSP_VMOP_PUSH:

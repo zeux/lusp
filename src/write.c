@@ -10,11 +10,11 @@
 
 #include <stdio.h>
 
-static inline void lusp_write_string(struct lusp_object_t* object)
+static inline void lusp_write_string(struct lusp_object_t object)
 {
 	putc('"', stdout);
 	
-	for (const char* value = object->string.value; *value; ++value)
+	for (const char* value = object.string.value; *value; ++value)
 	{
 		if (*value == '\\' || *value == '"') putc('\\', stdout);
 		putc(*value, stdout);
@@ -23,24 +23,24 @@ static inline void lusp_write_string(struct lusp_object_t* object)
 	putc('"', stdout);
 }
 
-static inline void lusp_write_cons(struct lusp_object_t* object)
+static inline void lusp_write_cons(struct lusp_object_t object)
 {
 	printf("(");
 	
 	// first element
-	lusp_write(object->cons.car);
-	object = object->cons.cdr;
+	lusp_write(*object.cons.car);
+	object = *object.cons.cdr;
 	
 	// remaining list elements
-	while (object && object->type == LUSP_OBJECT_CONS)
+	while (object.type == LUSP_OBJECT_CONS)
 	{
 		printf(" ");
-		lusp_write(object->cons.car);
-		object = object->cons.cdr;
+		lusp_write(*object.cons.car);
+		object = *object.cons.cdr;
 	}
 	
 	// dotted pair
-	if (object)
+	if (object.type != LUSP_OBJECT_NULL)
 	{
 		printf(" . ");
 		lusp_write(object);
@@ -49,30 +49,28 @@ static inline void lusp_write_cons(struct lusp_object_t* object)
 	printf(")");
 }
 
-void lusp_write(struct lusp_object_t* object)
+void lusp_write(struct lusp_object_t object)
 {
-	if (!object)
+	switch (object.type)
 	{
+	case LUSP_OBJECT_NULL:
 		printf("()");
-		return;
-	}
-	
-	switch (object->type)
-	{
+		break;
+		
 	case LUSP_OBJECT_SYMBOL:
-		printf("%s", object->symbol.name);
+		printf("%s", object.symbol.name);
 		break;
 		
 	case LUSP_OBJECT_BOOLEAN:
-		printf(object->boolean.value ? "#t" : "#f");
+		printf(object.boolean.value ? "#t" : "#f");
 		break;
 		
 	case LUSP_OBJECT_INTEGER:
-		printf("%d", object->integer.value);
+		printf("%d", object.integer.value);
 		break;
 		
 	case LUSP_OBJECT_REAL:
-		printf("%f", object->real.value);
+		printf("%f", object.real.value);
 		break;
 		
 	case LUSP_OBJECT_STRING:

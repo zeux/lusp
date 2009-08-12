@@ -2,7 +2,8 @@
 
 #pragma once
 
-struct lusp_object_t;
+#include <lusp/object.h>
+
 struct lusp_environment_t;
 struct lusp_environment_slot_t;
 struct lusp_vm_bytecode_t;
@@ -71,12 +72,12 @@ struct lusp_vm_op_t
 
 struct lusp_vm_upval_t
 {
-    struct lusp_object_t** ref;
+    struct lusp_object_t* ref;
     
     union
     {
         // for closed upval
-        struct lusp_object_t* object;
+        struct lusp_object_t object;
         
         // for open upval
         struct lusp_vm_upval_t* next;
@@ -90,7 +91,7 @@ struct lusp_vm_closure_t
 
 struct lusp_vm_bytecode_t;
 
-typedef struct lusp_object_t* (*lusp_vm_evaluator_t)(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t** eval_stack, unsigned int arg_count);
+typedef struct lusp_object_t (*lusp_vm_evaluator_t)(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t* eval_stack, unsigned int arg_count);
 
 struct lusp_vm_bytecode_t
 {

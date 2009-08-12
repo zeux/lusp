@@ -11,9 +11,7 @@
 
 extern struct mem_arena_t g_lusp_heap;
 
-extern struct lusp_object_t g_lusp_false;
-
-static inline struct lusp_vm_upval_t* mkupval(struct lusp_vm_upval_t** list, struct lusp_object_t** ref)
+static inline struct lusp_vm_upval_t* mkupval(struct lusp_vm_upval_t** list, struct lusp_object_t* ref)
 {
     // look for ref in list
     for (struct lusp_vm_upval_t* upval = *list; upval; upval = upval->next)
@@ -44,31 +42,31 @@ static inline void close_upvals(struct lusp_vm_upval_t* list)
     }
 }
 
-static inline struct lusp_object_t* create_list(struct lusp_object_t** begin, struct lusp_object_t** end)
+static inline struct lusp_object_t create_list(struct lusp_object_t* begin, struct lusp_object_t* end)
 {
     DL_ASSERT(begin <= end);
     
-    struct lusp_object_t* head = 0;
-    struct lusp_object_t* tail = 0;
+    struct lusp_object_t head = lusp_mknull();
+    struct lusp_object_t tail = lusp_mknull();
     
-    for (struct lusp_object_t** i = begin; i != end; ++i)
+    for (struct lusp_object_t* i = begin; i != end; ++i)
     {
-        struct lusp_object_t* cell = lusp_mkcons(*i, 0);
+        struct lusp_object_t cell = lusp_mkcons(*i, lusp_mknull());
         
-        if (tail) tail = tail->cons.cdr = cell;
+        if (tail.type != LUSP_OBJECT_NULL) tail = *tail.cons.cdr = cell;
         else head = tail = cell;
     }
     
     return head;
 }
 
-static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t** eval_stack, unsigned int arg_count)
+static struct lusp_object_t eval(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t* eval_stack, unsigned int arg_count)
 {
     struct lusp_vm_op_t* pc = code->ops;
     
-    struct lusp_object_t* value = 0;
+    struct lusp_object_t value = lusp_mknull();
     
-    struct lusp_object_t** eval_stack_top = eval_stack + code->local_count;
+    struct lusp_object_t* eval_stack_top = eval_stack + code->local_count;
     
     struct lusp_vm_upval_t* upvals = 0;
     
@@ -79,7 +77,7 @@ static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_v
         switch (op.opcode)
         {
         case LUSP_VMOP_GET_OBJECT:
-            value = op.get_object.object;
+            value = *op.get_object.object;
             break;
             
         case LUSP_VMOP_GET_LOCAL:
@@ -111,21 +109,21 @@ static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_v
             break;
             
         case LUSP_VMOP_CALL:
-            DL_ASSERT(value && (value->type == LUSP_OBJECT_CLOSURE || value->type == LUSP_OBJECT_PROCEDURE));
+            DL_ASSERT(value.type == LUSP_OBJECT_CLOSURE || value.type == LUSP_OBJECT_PROCEDURE);
             
-            if (value->type == LUSP_OBJECT_CLOSURE)
+            if (value.type == LUSP_OBJECT_CLOSURE)
             {
                 unsigned int count = op.call.count;
                 
                 eval_stack_top -= count;
-				value = value->closure.code->evaluator(value->closure.code, value->closure.closure, eval_stack_top, count);
+				value = value.closure.code->evaluator(value.closure.code, value.closure.closure, eval_stack_top, count);
             }
             else
             {
                 unsigned int count = op.call.count;
                 
                 eval_stack_top -= count;
-                value = (value->procedure.code)(code->env, eval_stack_top, count);
+                value = ((lusp_procedure_t)value.procedure.code)(code->env, eval_stack_top, count);
             }
             break;
             
@@ -138,11 +136,11 @@ static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_v
             break;
             
         case LUSP_VMOP_JUMP_IF:
-            if (value != &g_lusp_false) pc = pc + op.jump.offset - 1;
+            if (value.type != LUSP_OBJECT_BOOLEAN || value.boolean.value) pc = pc + op.jump.offset - 1;
             break;
             
         case LUSP_VMOP_JUMP_IFNOT:
-            if (value == &g_lusp_false) pc = pc + op.jump.offset - 1;
+            if (value.type == LUSP_OBJECT_BOOLEAN && !value.boolean.value) pc = pc + op.jump.offset - 1;
             break;
             
         case LUSP_VMOP_CREATE_CLOSURE:
@@ -151,7 +149,7 @@ static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_v
             
             value = lusp_mkclosure(op.create_closure.code, upval_count);
             
-            struct lusp_vm_closure_t* newclosure = value->closure.closure;
+            struct lusp_vm_closure_t* newclosure = value.closure.closure;
             
             // set upvalues
             for (unsigned int i = 0; i < upval_count; ++i)
@@ -184,13 +182,13 @@ static struct lusp_object_t* eval(struct lusp_vm_bytecode_t* code, struct lusp_v
     }
 }
 
-struct lusp_object_t* lusp_eval(struct lusp_object_t* object)
+struct lusp_object_t lusp_eval(struct lusp_object_t object)
 {
-	if (!object || object->type != LUSP_OBJECT_CLOSURE) return 0;
+	if (object.type != LUSP_OBJECT_CLOSURE) return lusp_mknull();
 	
-	struct lusp_object_t* eval_stack[1024];
+	struct lusp_object_t eval_stack[1024];
 	
-	struct lusp_vm_bytecode_t* code = object->closure.code;
+	struct lusp_vm_bytecode_t* code = object.closure.code;
 	
     return code->evaluator(code, 0, eval_stack, 0);
 }
