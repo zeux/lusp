@@ -68,9 +68,23 @@ struct lusp_vm_op_t
 	};
 };
 
+struct lusp_vm_upval_t
+{
+    struct lusp_object_t** ref;
+    
+    union
+    {
+        // for closed upval
+        struct lusp_object_t* object;
+        
+        // for open upval
+        struct lusp_vm_upval_t* next;
+    };
+};
+
 struct lusp_vm_closure_t
 {
-	struct lusp_object_t** upvals[1];
+	struct lusp_vm_upval_t* upvals[1];
 };
 
 struct lusp_vm_bytecode_t;
