@@ -12,67 +12,10 @@
 #include <lusp/eval.h>
 #include <lusp/memory.h>
 
+#include <lusp/compiler/internal.h>
+#include <lusp/compiler/codegen.h>
+
 #include <core/memory.h>
-
-#include <setjmp.h>
-#include <stdio.h>
-
-struct compiler_t;
-
-struct binding_t
-{
-	struct lusp_object_t symbol;
-	unsigned int index;
-};
-
-struct scope_t
-{
-	struct compiler_t* compiler;
-	
-	struct scope_t* parent;
-	
-	struct binding_t binds[1024];
-	unsigned int bind_count;
-};
-
-struct upval_t
-{
-	struct scope_t* scope;
-	struct binding_t* binding;
-};
-
-struct compiler_t
-{
-    // global environment
-    struct lusp_environment_t* env;
-    
-	// scope stack
-	struct scope_t* scope;
-	
-	// local variables
-	unsigned int local_count;
-	
-	// upvalues
-	struct upval_t upvals[1024];
-	unsigned int upval_count;
-	
-	// opcode buffer
-	struct lusp_vm_op_t ops[1024];
-	unsigned int op_count;
-	
-	// error facilities
-	jmp_buf* error;
-};
-
-static inline void check(struct compiler_t* compiler, bool condition, const char* message)
-{
-	if (!condition)
-	{
-		printf("error: compile failed (%s)\n", message);
-
-		longjmp(*compiler->error, 1);
-	}
-}
 
 static inline struct binding_t* find_bind_local(struct scope_t* scope, struct lusp_object_t symbol)
 {
@@ -116,30 +59,14 @@ static inline unsigned int find_upval(struct compiler_t* compiler, struct scope_
 	return compiler->upval_count++;
 }
 
-static inline void emit(struct compiler_t* compiler, struct lusp_vm_op_t op)
-{
-	check(compiler, compiler->op_count < sizeof(compiler->ops) / sizeof(compiler->ops[0]), "op buffer overflow");
-	
-	compiler->ops[compiler->op_count++] = op;
-}
-
-static inline void fixup_jump(struct compiler_t* compiler, unsigned int jump, unsigned int dest)
-{
-	compiler->ops[jump].jump.offset = (int)dest - (int)jump;
-}
-
 static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, struct compiler_t* parent, struct lusp_ast_node_t* args, struct lusp_ast_node_t* body);
 static void compile(struct compiler_t* compiler, struct lusp_ast_node_t* node);
 
 static void compile_object(struct compiler_t* compiler, struct lusp_object_t object)
 {
-	struct lusp_vm_op_t op;
-	
 	struct lusp_object_t o = lusp_mkcons(object, object);
 	
-	op.opcode = LUSP_VMOP_GET_OBJECT;
-	op.get_object.object = o.cons;
-	emit(compiler, op);
+	emit_get_object(compiler, o.cons);
 }
 
 static void compile_literal(struct compiler_t* compiler, struct lusp_ast_node_t* node)
@@ -154,20 +81,14 @@ static void compile_bind_getset(struct compiler_t* compiler, struct scope_t* sco
 	if (scope->compiler == compiler)
 	{
 		// local variable
-		struct lusp_vm_op_t op;
-	
-		op.opcode = set ? LUSP_VMOP_SET_LOCAL : LUSP_VMOP_GET_LOCAL;
-		op.getset_local.index = bind->index;
-		emit(compiler, op);
+		emit_getset_local(compiler, set, bind->index);
 	}
 	else
 	{
 		// upvalue
-		struct lusp_vm_op_t op;
-	
-		op.opcode = set ? LUSP_VMOP_SET_UPVAL : LUSP_VMOP_GET_UPVAL;
-		op.getset_local.index = find_upval(compiler, scope, bind);
-		emit(compiler, op);
+		unsigned int index = find_upval(compiler, scope, bind);
+		
+		emit_getset_upval(compiler, set, index);
 	}
 }
 
@@ -186,11 +107,7 @@ static void compile_symbol_getset(struct compiler_t* compiler, struct lusp_objec
 	else
 	{
 		// global variable
-		struct lusp_vm_op_t op;
-	
-		op.opcode = set ? LUSP_VMOP_SET_GLOBAL : LUSP_VMOP_GET_GLOBAL;
-		op.getset_global.slot = lusp_environment_get_slot(compiler->env, symbol);
-		emit(compiler, op);
+		emit_getset_global(compiler, set, lusp_environment_get_slot(compiler->env, symbol));
 	}
 }
 
@@ -213,13 +130,7 @@ static unsigned int compile_list(struct compiler_t* compiler, struct lusp_ast_no
 		compile(compiler, object->cons.car);
 		
 		// push element on stack
-		if (push)
-		{
-			struct lusp_vm_op_t op;
-			
-			op.opcode = LUSP_VMOP_PUSH;
-			emit(compiler, op);
-		}
+		if (push) emit_push(compiler);
 		
 		count++;
 		object = object->cons.cdr;
@@ -237,11 +148,7 @@ static void compile_call(struct compiler_t* compiler, struct lusp_ast_node_t* fu
 	compile(compiler, func);
 	
 	// call function
-	struct lusp_vm_op_t op;
-	
-	op.opcode = LUSP_VMOP_CALL;
-	op.call.count = arg_count;
-	emit(compiler, op);
+	emit_call(compiler, arg_count);
 }
 
 struct do_var_t
@@ -323,11 +230,7 @@ static void compile_do(struct compiler_t* compiler, struct lusp_ast_node_t* args
         scope.bind_count++;
         
         // assign variable
-        struct lusp_vm_op_t op;
-        
-        op.opcode = LUSP_VMOP_SET_LOCAL;
-        op.getset_local.index = index;
-        emit(compiler, op);
+        emit_getset_local(compiler, true, index);
     }
     
     // push scope
@@ -343,11 +246,7 @@ static void compile_do(struct compiler_t* compiler, struct lusp_ast_node_t* args
     unsigned int test_op = compiler->op_count;
     
     // jump to the exit if test is true
-    struct lusp_vm_op_t op;
-    
-    op.opcode = LUSP_VMOP_JUMP_IF;
-    op.jump.offset = 0;
-    emit(compiler, op);
+    emit_jump(compiler, LUSP_VMOP_JUMP_IF, 0);
     
     // evaluate commands
     compile_list(compiler, code, false);
@@ -358,17 +257,11 @@ static void compile_do(struct compiler_t* compiler, struct lusp_ast_node_t* args
         compile(compiler, vars[i].step);
         
         // assign variable
-        struct lusp_vm_op_t op;
-        
-        op.opcode = LUSP_VMOP_SET_LOCAL;
-        op.getset_local.index = scope.binds[i].index;
-        emit(compiler, op);
+        emit_getset_local(compiler, true, scope.binds[i].index);
     }
     
     // loop
-    op.opcode = LUSP_VMOP_JUMP;
-    op.jump.offset = 0;
-    emit(compiler, op);
+    emit_jump(compiler, LUSP_VMOP_JUMP, 0);
     
     // fixup jumps
     fixup_jump(compiler, compiler->op_count - 1, loop_op);
@@ -399,11 +292,7 @@ static void compile_whenunless(struct compiler_t* compiler, struct lusp_ast_node
 	// jump over code
 	unsigned int jump_op = compiler->op_count;
 
-	struct lusp_vm_op_t op;
-
-	op.opcode = unless ? LUSP_VMOP_JUMP_IF : LUSP_VMOP_JUMP_IFNOT;
-	op.jump.offset = 0;
-	emit(compiler, op);
+    emit_jump(compiler, unless ? LUSP_VMOP_JUMP_IF : LUSP_VMOP_JUMP_IFNOT, 0);
 
 	// evaluate code
 	compile_list(compiler, code, false);
@@ -432,11 +321,7 @@ static void compile_if(struct compiler_t* compiler, struct lusp_ast_node_t* args
 	// jump over if code
 	unsigned int jump_ifnot_op = compiler->op_count;
 	
-	struct lusp_vm_op_t op;
-	
-	op.opcode = LUSP_VMOP_JUMP_IFNOT;
-	op.jump.offset = ~0u;
-	emit(compiler, op);
+	emit_jump(compiler, LUSP_VMOP_JUMP_IFNOT, 0);
 	
 	// evaluate if code
 	compile(compiler, ifcode);
@@ -444,9 +329,7 @@ static void compile_if(struct compiler_t* compiler, struct lusp_ast_node_t* args
 	// jump over else code
 	unsigned int jump_op = compiler->op_count;
 	
-	op.opcode = LUSP_VMOP_JUMP;
-	op.jump.offset = ~0u;
-	emit(compiler, op);
+	emit_jump(compiler, LUSP_VMOP_JUMP, 0);
 	
 	// else code
 	compile(compiler, elsecode);
@@ -496,11 +379,7 @@ static void compile_let_pushvardecl(struct compiler_t* compiler, struct scope_t*
     compile(compiler, decl->cons.car);
 
     // store value in locals
-    struct lusp_vm_op_t op;
-
-    op.opcode = LUSP_VMOP_SET_LOCAL;
-    op.getset_local.index = index;
-    emit(compiler, op);
+    emit_getset_local(compiler, true, index);
 }
 
 static void compile_letseq_helper(struct compiler_t* compiler, struct lusp_ast_node_t* args, struct lusp_ast_node_t* body)
@@ -575,12 +454,8 @@ static void compile_closure(struct compiler_t* parent, struct lusp_ast_node_t* a
 	// compile closure
 	struct lusp_vm_bytecode_t* bytecode = create_closure(&compiler, parent, args, body);
 	
-	struct lusp_vm_op_t op;
-	
 	// create closure
-	op.opcode = LUSP_VMOP_CREATE_CLOSURE;
-	op.create_closure.code = bytecode;
-	emit(parent, op);
+	emit_create_closure(parent, bytecode);
 	
 	// set upvalues
 	for (unsigned int i = 0; i < compiler.upval_count; ++i)
@@ -624,11 +499,7 @@ static void compile_define(struct compiler_t* compiler, struct lusp_ast_node_t* 
 	}
 	
 	// set value to slot
-	struct lusp_vm_op_t op;
-	
-	op.opcode = LUSP_VMOP_SET_GLOBAL; // $$$ support local defines
-	op.getset_global.slot = lusp_environment_get_slot(compiler->env, symbol);
-	emit(compiler, op);
+	emit_getset_global(compiler, true, lusp_environment_get_slot(compiler->env, symbol)); // $$$ support local defines
 }
 
 static struct lusp_object_t compile_quote_helper(struct compiler_t* compiler, struct lusp_ast_node_t* node)
@@ -767,23 +638,13 @@ static void compile_closure_code(struct compiler_t* compiler, struct lusp_ast_no
     }
     
     // create list for rest
-    if (rest)
-    {
-        struct lusp_vm_op_t op;
-        
-        op.opcode = LUSP_VMOP_CREATE_LIST;
-        op.create_list.index = scope.bind_count - 1;
-        emit(compiler, op);
-    }
+    if (rest) emit_create_list(compiler, scope.bind_count - 1);
     
     // compile body
     compile_list(compiler, body, false);
     
     // return
-    struct lusp_vm_op_t op;
-    
-    op.opcode = LUSP_VMOP_RETURN;
-    emit(compiler, op);
+    emit_return(compiler);
 }
 
 static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, struct compiler_t* parent, struct lusp_ast_node_t* args, struct lusp_ast_node_t* body)
