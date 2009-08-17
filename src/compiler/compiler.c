@@ -654,6 +654,8 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, st
     compiler->env = parent->env;
     compiler->scope = parent->scope;
     compiler->local_count = 0;
+    compiler->temp_count = 0;
+    compiler->current_temp_count = 0;
     compiler->upval_count = 0;
     compiler->op_count = 0;
     compiler->flags = parent->flags;
@@ -675,6 +677,7 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, st
     
     code->env = parent->env;
     code->local_count = compiler->local_count;
+    code->temp_count = compiler->temp_count;
     code->upval_count = compiler->upval_count;
     code->ops = ops;
     code->op_count = compiler->op_count;

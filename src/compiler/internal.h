@@ -40,6 +40,10 @@ struct compiler_t
 	// local variables
 	unsigned int local_count;
 	
+	// temp variables
+	unsigned int current_temp_count;
+	unsigned int temp_count;
+	
 	// upvalues
 	struct upval_t upvals[1024];
 	unsigned int upval_count;

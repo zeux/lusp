@@ -45,6 +45,9 @@ static inline void emit_getset_global(struct compiler_t* compiler, bool set, str
 
 static inline void emit_push(struct compiler_t* compiler)
 {
+    compiler->current_temp_count++;
+    compiler->temp_count = max(compiler->temp_count, compiler->current_temp_count);
+    
     struct lusp_vm_op_t op;
     op.opcode = LUSP_VMOP_PUSH;
     emit(compiler, op);
@@ -52,6 +55,9 @@ static inline void emit_push(struct compiler_t* compiler)
 
 static inline void emit_call(struct compiler_t* compiler, unsigned int count)
 {
+    DL_ASSERT(compiler->current_temp_count >= count);
+    compiler->current_temp_count -= count;
+    
     struct lusp_vm_op_t op;
     op.opcode = LUSP_VMOP_CALL;
     op.call.count = count;
