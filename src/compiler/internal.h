@@ -46,7 +46,6 @@ struct compiler_t
 	
 	// opcode buffer
 	struct lusp_vm_op_t ops[1024];
-	unsigned short lines[1024];
 	unsigned int op_count;
 	
 	// compilation parameters

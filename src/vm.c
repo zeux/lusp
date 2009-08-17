@@ -20,8 +20,7 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, b
 	{
 		struct lusp_vm_op_t* op = &code->ops[i];
 		
-		if (code->lines) printf("%s(%3d) %02d: ", indent, code->lines[i], i);
-		else printf("%s%02d: ", indent, i);
+		printf("%s%02d: ", indent, i);
 		
 		switch (op->opcode)
 		{

@@ -102,7 +102,6 @@ struct lusp_vm_bytecode_t
     unsigned int upval_count;
 
 	struct lusp_vm_op_t* ops;
-	unsigned short* lines;
 	unsigned int op_count;
 
 	void* jit;

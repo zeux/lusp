@@ -670,18 +670,6 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, st
     
     memcpy(ops, compiler->ops, ops_size);
     
-    unsigned short* lines = 0;
-    
-    if (compiler->flags & LUSP_COMPILE_DEBUG_INFO)
-    {
-        unsigned int lines_size = compiler->op_count * sizeof(unsigned short);
-        
-        lines = (unsigned short*)lusp_memory_allocate(lines_size);
-        DL_ASSERT(lines);
-        
-        memcpy(lines, compiler->lines, lines_size);
-    }
-
     struct lusp_vm_bytecode_t* code = (struct lusp_vm_bytecode_t*)lusp_memory_allocate(sizeof(struct lusp_vm_bytecode_t));
     DL_ASSERT(code);
     
@@ -689,7 +677,6 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, st
     code->local_count = compiler->local_count;
     code->upval_count = compiler->upval_count;
     code->ops = ops;
-    code->lines = lines;
     code->op_count = compiler->op_count;
 	code->jit = 0;
 	
