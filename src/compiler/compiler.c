@@ -11,6 +11,7 @@
 #include <lusp/environment.h>
 #include <lusp/eval.h>
 #include <lusp/memory.h>
+#include <lusp/compile.h>
 
 #include <lusp/compiler/internal.h>
 #include <lusp/compiler/codegen.h>
@@ -655,6 +656,7 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, st
     compiler->local_count = 0;
     compiler->upval_count = 0;
     compiler->op_count = 0;
+    compiler->flags = parent->flags;
     compiler->error = parent->error;
     
     // compile closure code
@@ -667,6 +669,18 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, st
     DL_ASSERT(ops);
     
     memcpy(ops, compiler->ops, ops_size);
+    
+    unsigned short* lines = 0;
+    
+    if (compiler->flags & LUSP_COMPILE_DEBUG_INFO)
+    {
+        unsigned int lines_size = compiler->op_count * sizeof(unsigned short);
+        
+        lines = (unsigned short*)lusp_memory_allocate(lines_size);
+        DL_ASSERT(lines);
+        
+        memcpy(lines, compiler->lines, lines_size);
+    }
 
     struct lusp_vm_bytecode_t* code = (struct lusp_vm_bytecode_t*)lusp_memory_allocate(sizeof(struct lusp_vm_bytecode_t));
     DL_ASSERT(code);
@@ -675,6 +689,7 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, st
     code->local_count = compiler->local_count;
     code->upval_count = compiler->upval_count;
     code->ops = ops;
+    code->lines = lines;
     code->op_count = compiler->op_count;
 	code->jit = 0;
 	
@@ -683,7 +698,7 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, st
     return code;
 }
 
-struct lusp_object_t lusp_compile(struct lusp_environment_t* env, struct lusp_ast_node_t* node)
+struct lusp_object_t lusp_compile_ast(struct lusp_environment_t* env, struct lusp_ast_node_t* node, unsigned int flags)
 {
 	// setup error handling facilities
 	jmp_buf buf;
@@ -695,6 +710,7 @@ struct lusp_object_t lusp_compile(struct lusp_environment_t* env, struct lusp_as
 	
     parent.env = env;
     parent.scope = 0;
+    parent.flags = flags;
     parent.error = &buf;
     
     // compile bytecode
