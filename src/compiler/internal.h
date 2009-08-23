@@ -11,6 +11,7 @@ struct binding_t
 {
 	struct lusp_object_t symbol;
 	unsigned int index;
+	bool has_upval;
 };
 
 struct scope_t
@@ -37,12 +38,9 @@ struct compiler_t
 	// scope stack
 	struct scope_t* scope;
 	
-	// local variables
-	unsigned int local_count;
-	
-	// temp variables
-	unsigned int current_temp_count;
-	unsigned int temp_count;
+	// registers
+	unsigned int free_reg;
+	unsigned int reg_count;
 	
 	// upvalues
 	struct upval_t upvals[1024];

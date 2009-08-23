@@ -4,96 +4,100 @@
 
 #include <lusp/compiler/internal.h>
 
-static inline void emit(struct compiler_t* compiler, struct lusp_vm_op_t op)
+static inline void emit(struct compiler_t* compiler, struct lusp_vm_op_t op, enum lusp_vm_opcode_t opcode, unsigned int reg)
 {
 	check(compiler, compiler->op_count < sizeof(compiler->ops) / sizeof(compiler->ops[0]), "op buffer overflow");
+	
+	op.opcode = (uint8_t)opcode;
+	op.padding = 0;
+	op.reg = (uint16_t)reg;
 	
 	compiler->ops[compiler->op_count++] = op;
 }
 
-static inline void emit_get_object(struct compiler_t* compiler, struct lusp_object_t* object)
+static inline void emit_load_const(struct compiler_t* compiler, unsigned int reg, struct lusp_object_t* object)
 {
     struct lusp_vm_op_t op;
-    op.opcode = LUSP_VMOP_GET_OBJECT;
-    op.get_object.object = object;
-    emit(compiler, op);
+    op.load_const.object = object;
+    emit(compiler, op, LUSP_VMOP_LOAD_CONST, reg);
 }
 
-static inline void emit_getset_local(struct compiler_t* compiler, bool set, unsigned int index)
+static inline void emit_loadstore_global(struct compiler_t* compiler, unsigned int reg, struct lusp_environment_slot_t* slot, bool store)
 {
     struct lusp_vm_op_t op;
-    op.opcode = set ? LUSP_VMOP_SET_LOCAL : LUSP_VMOP_GET_LOCAL;
-    op.getset_local.index = index;
-    emit(compiler, op);
+    op.loadstore_global.slot = slot;
+    emit(compiler, op, store ? LUSP_VMOP_STORE_GLOBAL : LUSP_VMOP_LOAD_GLOBAL, reg);
 }
 
-static inline void emit_getset_upval(struct compiler_t* compiler, bool set, unsigned int index)
+static inline void emit_loadstore_upval(struct compiler_t* compiler, unsigned int reg, unsigned int index, bool store)
 {
     struct lusp_vm_op_t op;
-    op.opcode = set ? LUSP_VMOP_SET_UPVAL : LUSP_VMOP_GET_UPVAL;
-    op.getset_local.index = index;
-    emit(compiler, op);
+    op.loadstore_upval.index = index;
+    emit(compiler, op, store ? LUSP_VMOP_STORE_UPVAL : LUSP_VMOP_LOAD_UPVAL, reg);
+}
+static inline void emit_move(struct compiler_t* compiler, unsigned int reg, unsigned int index)
+{
+    struct lusp_vm_op_t op;
+    op.move.index = index;
+    emit(compiler, op, LUSP_VMOP_MOVE, reg);
 }
 
-static inline void emit_getset_global(struct compiler_t* compiler, bool set, struct lusp_environment_slot_t* slot)
+static inline void emit_call(struct compiler_t* compiler, unsigned int reg, unsigned int args, unsigned int count)
 {
     struct lusp_vm_op_t op;
-    op.opcode = set ? LUSP_VMOP_SET_GLOBAL : LUSP_VMOP_GET_GLOBAL;
-    op.getset_global.slot = slot;
-    emit(compiler, op);
+    op.call.args = (uint16_t)args;
+    op.call.count = (uint16_t)count;
+    emit(compiler, op, LUSP_VMOP_CALL, reg);
 }
 
-static inline void emit_push(struct compiler_t* compiler)
+static inline void emit_return(struct compiler_t* compiler, unsigned int reg)
 {
-    compiler->current_temp_count++;
-    compiler->temp_count = max(compiler->temp_count, compiler->current_temp_count);
-    
     struct lusp_vm_op_t op;
-    op.opcode = LUSP_VMOP_PUSH;
-    emit(compiler, op);
+    op.dummy = 0;
+    emit(compiler, op, LUSP_VMOP_RETURN, reg);
 }
 
-static inline void emit_call(struct compiler_t* compiler, unsigned int count)
-{
-    DL_ASSERT(compiler->current_temp_count >= count);
-    compiler->current_temp_count -= count;
-    
-    struct lusp_vm_op_t op;
-    op.opcode = LUSP_VMOP_CALL;
-    op.call.count = count;
-    emit(compiler, op);
-}
-
-static inline void emit_return(struct compiler_t* compiler)
+static inline void emit_jump(struct compiler_t* compiler, int offset)
 {
     struct lusp_vm_op_t op;
-    op.opcode = LUSP_VMOP_RETURN;
-    emit(compiler, op);
-}
-
-static inline void emit_jump(struct compiler_t* compiler, enum lusp_vm_opcode_t opcode, int offset)
-{
-    DL_ASSERT(opcode == LUSP_VMOP_JUMP || opcode == LUSP_VMOP_JUMP_IF || opcode == LUSP_VMOP_JUMP_IFNOT);
-    struct lusp_vm_op_t op;
-    op.opcode = opcode;
     op.jump.offset = offset;
-    emit(compiler, op);
+    emit(compiler, op, LUSP_VMOP_JUMP, 0);
 }
 
-static inline void emit_create_closure(struct compiler_t* compiler, struct lusp_vm_bytecode_t* bytecode)
+static inline void emit_jump_if(struct compiler_t* compiler, unsigned int reg, int offset)
 {
     struct lusp_vm_op_t op;
-    op.opcode = LUSP_VMOP_CREATE_CLOSURE;
+    op.jump.offset = offset;
+    emit(compiler, op, LUSP_VMOP_JUMP_IF, reg);
+}
+
+static inline void emit_jump_ifnot(struct compiler_t* compiler, unsigned int reg, int offset)
+{
+    struct lusp_vm_op_t op;
+    op.jump.offset = offset;
+    emit(compiler, op, LUSP_VMOP_JUMP_IFNOT, reg);
+}
+
+static inline void emit_create_closure(struct compiler_t* compiler, unsigned int reg, struct lusp_vm_bytecode_t* bytecode)
+{
+    struct lusp_vm_op_t op;
     op.create_closure.code = bytecode;
-    emit(compiler, op);
+    emit(compiler, op, LUSP_VMOP_CREATE_CLOSURE, reg);
 }
 
-static inline void emit_create_list(struct compiler_t* compiler, unsigned int index)
+static inline void emit_create_list(struct compiler_t* compiler, unsigned int reg)
 {
     struct lusp_vm_op_t op;
-    op.opcode = LUSP_VMOP_CREATE_LIST;
-    op.create_list.index = index;
-    emit(compiler, op);
+    op.dummy = 0;
+    emit(compiler, op, LUSP_VMOP_CREATE_LIST, reg);
+}
+
+static inline void emit_close(struct compiler_t* compiler, unsigned int begin, unsigned int end)
+{
+	struct lusp_vm_op_t op;
+	op.close.begin = (unsigned short)begin;
+	op.close.end = (unsigned short)end;
+	emit(compiler, op, LUSP_VMOP_CLOSE, 0);
 }
 
 static inline void fixup_jump(struct compiler_t* compiler, unsigned int jump, unsigned int dest)

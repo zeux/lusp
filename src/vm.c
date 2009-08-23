@@ -14,7 +14,7 @@
 
 static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, bool deep)
 {
-	printf("%s%d locals, %d temps, %d upvals\n", indent, code->local_count, code->temp_count, code->upval_count);
+	printf("%s%d registers, %d upvals\n", indent, code->reg_count, code->upval_count);
 	
 	for (unsigned int i = 0; i < code->op_count; ++i)
 	{
@@ -24,38 +24,38 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, b
 		
 		switch (op->opcode)
 		{
-		case LUSP_VMOP_GET_OBJECT:
-			printf("get_object %p [ ", op->get_object.object);
-			lusp_write(*op->get_object.object);
+		case LUSP_VMOP_LOAD_CONST:
+			printf("load_const r%d, %p [ ", op->reg, op->load_const.object);
+			lusp_write(*op->load_const.object);
 			printf(" ]\n");
 			break;
 			
-		case LUSP_VMOP_GET_LOCAL:
-		case LUSP_VMOP_SET_LOCAL:
-			printf("%s_local %d\n", (op->opcode == LUSP_VMOP_SET_LOCAL) ? "set" : "get", op->getset_local.index);
+		case LUSP_VMOP_LOAD_GLOBAL:
+			printf("load_global r%d, %p [ %s ]\n", op->reg, op->loadstore_global.slot, op->loadstore_global.slot->name->name);
 			break;
 			
-		case LUSP_VMOP_GET_UPVAL:
-		case LUSP_VMOP_SET_UPVAL:
-			printf("%s_upval %d\n", (op->opcode == LUSP_VMOP_SET_UPVAL) ? "set" : "get", op->getset_local.index);
+		case LUSP_VMOP_STORE_GLOBAL:
+			printf("store_global %p [ %s ], r%d\n", op->loadstore_global.slot, op->loadstore_global.slot->name->name, op->reg);
 			break;
 			
-		case LUSP_VMOP_GET_GLOBAL:
-		case LUSP_VMOP_SET_GLOBAL:
-			printf("%s_global %p [ %s ]\n", (op->opcode == LUSP_VMOP_SET_GLOBAL) ? "set" : "get",
-				op->getset_global.slot, op->getset_global.slot->name->name);
+		case LUSP_VMOP_LOAD_UPVAL:
+			printf("load_upval r%d, u%d\n", op->reg, op->loadstore_upval.index);
 			break;
 			
-		case LUSP_VMOP_PUSH:
-			printf("push\n");
+		case LUSP_VMOP_STORE_UPVAL:
+			printf("store_upval u%d, r%d\n", op->loadstore_upval.index, op->reg);
+			break;
+			
+		case LUSP_VMOP_MOVE:
+			printf("move r%d, r%d\n", op->reg, op->move.index);
 			break;
 			
 		case LUSP_VMOP_CALL:
-			printf("call %d\n", op->call.count);
+			printf("call r%d, r%d, %d\n", op->reg, op->call.args, op->call.count);
 			break;
 			
 		case LUSP_VMOP_RETURN:
-			printf("return\n");
+			printf("return r%d\n", op->reg);
 			break;
 			
 		case LUSP_VMOP_JUMP:
@@ -63,15 +63,15 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, b
 			break;
 			
 		case LUSP_VMOP_JUMP_IF:
-			printf("jump_if %+d\n", op->jump.offset);
+			printf("jump_if r%d, %+d\n", op->reg, op->jump.offset);
 			break;
 			
 		case LUSP_VMOP_JUMP_IFNOT:
-			printf("jump_ifnot %+d\n", op->jump.offset);
+			printf("jump_ifnot r%d, %+d\n", op->reg, op->jump.offset);
 			break;
 			
 		case LUSP_VMOP_CREATE_CLOSURE:
-			printf("create_closure %p\n", op->create_closure.code);
+			printf("create_closure r%d, %p\n", op->reg, op->create_closure.code);
 			
 			if (deep)
 			{
@@ -85,7 +85,11 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, b
     		break;
 			
 		case LUSP_VMOP_CREATE_LIST:
-			printf("create_list %d\n", op->create_list.index);
+			printf("create_list r%d\n", op->reg);
+			break;
+			
+		case LUSP_VMOP_CLOSE:
+			printf("close r%d, r%d\n", op->close.begin, op->close.end);
 			break;
 			
 		default:

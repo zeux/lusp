@@ -53,6 +53,10 @@ static inline unsigned int find_upval(struct compiler_t* compiler, struct scope_
 			return i;
 		}
 		
+	// mark binding
+	DL_ASSERT(!binding->has_upval);
+	binding->has_upval = true;
+	
 	// add new upval
 	compiler->upvals[compiler->upval_count].binding = binding;
 	compiler->upvals[compiler->upval_count].scope = scope;
@@ -60,40 +64,76 @@ static inline unsigned int find_upval(struct compiler_t* compiler, struct scope_
 	return compiler->upval_count++;
 }
 
-static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, struct compiler_t* parent, struct lusp_ast_node_t* args, struct lusp_ast_node_t* body);
-static void compile(struct compiler_t* compiler, struct lusp_ast_node_t* node);
+static inline void push_scope(struct compiler_t* compiler, struct scope_t* scope)
+{
+	scope->parent = compiler->scope;
+	compiler->scope = scope;
+}
 
-static void compile_object(struct compiler_t* compiler, struct lusp_object_t object)
+static inline void pop_scope(struct compiler_t* compiler)
+{
+	struct scope_t* scope = compiler->scope;
+	
+	// look for bindings that need to be closed
+	unsigned int upval_begin = ~0u, upval_end = 0;
+	
+	for (unsigned int i = 0; i < scope->bind_count; ++i)
+		if (scope->binds[i].has_upval)
+		{
+			unsigned int index = scope->binds[i].index;
+			
+			upval_begin = min(upval_begin, index);
+			upval_end = max(upval_end, index + 1);
+		}
+		
+	// close bindings
+	if (upval_begin < upval_end) emit_close(compiler, upval_begin, upval_end);
+	
+	compiler->scope = scope->parent;
+}
+
+static inline unsigned int allocate_registers(struct compiler_t* compiler, unsigned int count)
+{
+	unsigned int result = compiler->free_reg;
+	compiler->free_reg += count;
+	compiler->reg_count = max(compiler->reg_count, compiler->free_reg);
+	return result;
+}
+
+static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, struct compiler_t* parent, struct lusp_ast_node_t* args, struct lusp_ast_node_t* body);
+static void compile(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* node);
+
+static void compile_object(struct compiler_t* compiler, unsigned int reg, struct lusp_object_t object)
 {
 	struct lusp_object_t o = lusp_mkcons(object, object);
 	
-	emit_get_object(compiler, o.cons);
+	emit_load_const(compiler, reg, o.cons);
 }
 
-static void compile_literal(struct compiler_t* compiler, struct lusp_ast_node_t* node)
+static void compile_literal(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* node)
 {
 	DL_ASSERT(!node || node->type == LUSP_AST_LITERAL);
 	
-	compile_object(compiler, node ? node->literal : lusp_mknull());
+	compile_object(compiler, reg, node ? node->literal : lusp_mknull());
 }
 
-static void compile_bind_getset(struct compiler_t* compiler, struct scope_t* scope, struct binding_t* bind, bool set)
+static void compile_bind_getset(struct compiler_t* compiler, unsigned int reg, struct scope_t* scope, struct binding_t* bind, bool set)
 {
 	if (scope->compiler == compiler)
 	{
 		// local variable
-		emit_getset_local(compiler, set, bind->index);
+		set ? emit_move(compiler, bind->index, reg) : emit_move(compiler, reg, bind->index);
 	}
 	else
 	{
 		// upvalue
 		unsigned int index = find_upval(compiler, scope, bind);
 		
-		emit_getset_upval(compiler, set, index);
+		emit_loadstore_upval(compiler, reg, index, set);
 	}
 }
 
-static void compile_symbol_getset(struct compiler_t* compiler, struct lusp_object_t symbol, bool set)
+static void compile_symbol_getset(struct compiler_t* compiler, unsigned int reg, struct lusp_object_t symbol, bool set)
 {
 	DL_ASSERT(symbol.type == LUSP_OBJECT_SYMBOL);
 	
@@ -103,53 +143,71 @@ static void compile_symbol_getset(struct compiler_t* compiler, struct lusp_objec
 	if (bind)
 	{
 		// local variable or upvalue
-		compile_bind_getset(compiler, scope, bind, set);
+		compile_bind_getset(compiler, reg, scope, bind, set);
 	}
 	else
 	{
 		// global variable
-		emit_getset_global(compiler, set, lusp_environment_get_slot(compiler->env, symbol));
+		emit_loadstore_global(compiler, reg, lusp_environment_get_slot(compiler->env, symbol), set);
 	}
 }
 
-static void compile_symbol(struct compiler_t* compiler, struct lusp_ast_node_t* node)
+static void compile_symbol(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* node)
 {
 	DL_ASSERT(node && node->type == LUSP_AST_SYMBOL);
 	
-    compile_symbol_getset(compiler, node->symbol, false);
+    compile_symbol_getset(compiler, reg, node->symbol, false);
 }
 
-static unsigned int compile_list(struct compiler_t* compiler, struct lusp_ast_node_t* object, bool push)
+static void compile_list(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* object, bool incr_reg)
 {
-	unsigned int count = 0;
-	
 	while (object)
 	{
 		check(compiler, object->type == LUSP_AST_CONS, "invalid parameter");
 	
 		// compile list element
-		compile(compiler, object->cons.car);
+		compile(compiler, reg, object->cons.car);
 		
-		// push element on stack
-		if (push) emit_push(compiler);
+		// increment register
+		reg += incr_reg;
 		
-		count++;
 		object = object->cons.cdr;
 	}
-	
-	return count;
 }
 
-static void compile_call(struct compiler_t* compiler, struct lusp_ast_node_t* func, struct lusp_ast_node_t* args)
+static unsigned int list_length(struct lusp_ast_node_t* head)
 {
-	// evaluate function arguments left to right to stack
-	unsigned int arg_count = compile_list(compiler, args, true);
+	unsigned int result = 0;
+	
+	while (head && head->type == LUSP_AST_CONS)
+	{
+		result++;
+		
+		head = head->cons.cdr;
+	}
+	
+	return result;
+}
+
+static void compile_call(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* func, struct lusp_ast_node_t* args)
+{
+	unsigned int free_reg = compiler->free_reg;
+	
+	// allocate registers for function arguments
+	unsigned int arg_count = list_length(args);
+	unsigned int arg_regs = allocate_registers(compiler, arg_count);
+	
+	// evaluate function arguments left to right
+	compile_list(compiler, arg_regs, args, true);
 	
 	// evaluate function
-	compile(compiler, func);
+	compile(compiler, reg, func);
 	
 	// call function
-	emit_call(compiler, arg_count);
+	emit_call(compiler, reg, arg_regs, arg_count);
+	
+	// free temporary registers
+	compiler->free_reg = free_reg;
 }
 
 struct do_var_t
@@ -195,7 +253,7 @@ static unsigned int extract_do_var(struct compiler_t* compiler, struct lusp_ast_
     return count;
 }
 
-static void compile_do(struct compiler_t* compiler, struct lusp_ast_node_t* args)
+static void compile_do(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* args)
 {
 	check(compiler, args && args->type == LUSP_AST_CONS && args->cons.cdr && args->cons.cdr->type == LUSP_AST_CONS, "do: malformed syntax");
 	
@@ -212,70 +270,68 @@ static void compile_do(struct compiler_t* compiler, struct lusp_ast_node_t* args
     // add new scope
     struct scope_t scope;
     scope.compiler = compiler;
-    scope.parent = compiler->scope;
     scope.bind_count = 0;
 
     // process init steps
+	unsigned int free_reg = compiler->free_reg;
+	
     for (unsigned int i = 0; i < var_count; ++i)
     {
         check(compiler, !find_bind_local(&scope, vars[i].var->symbol), "do: duplicate variables detected");
 
+		// reserve space for variable
+		unsigned int index = allocate_registers(compiler, 1);
+		
         // evaluate init step
-        compile(compiler, vars[i].init);
+        compile(compiler, index, vars[i].init);
         
         // add new variable to scope
-        unsigned int index = compiler->local_count++;
-
         scope.binds[scope.bind_count].symbol = vars[i].var->symbol;
         scope.binds[scope.bind_count].index = index;
+        scope.binds[scope.bind_count].has_upval = false;
         scope.bind_count++;
-        
-        // assign variable
-        emit_getset_local(compiler, true, index);
     }
     
     // push scope
-    compiler->scope = &scope;
+    push_scope(compiler, &scope);
     
     // loop label
     unsigned int loop_op = compiler->op_count;
     
     // evaluate test
-    compile(compiler, test->cons.car);
+    compile(compiler, reg, test->cons.car);
     
     // test label
     unsigned int test_op = compiler->op_count;
     
     // jump to the exit if test is true
-    emit_jump(compiler, LUSP_VMOP_JUMP_IF, 0);
+    emit_jump_if(compiler, reg, 0);
     
     // evaluate commands
-    compile_list(compiler, code, false);
+    compile_list(compiler, reg, code, false);
     
     // evaluate steps
     for (unsigned int i = 0; i < var_count; ++i)
-    {
-        compile(compiler, vars[i].step);
-        
-        // assign variable
-        emit_getset_local(compiler, true, scope.binds[i].index);
-    }
+        compile(compiler, scope.binds[i].index, vars[i].step);
     
     // loop
-    emit_jump(compiler, LUSP_VMOP_JUMP, 0);
+    emit_jump(compiler, 0);
     
     // fixup jumps
     fixup_jump(compiler, compiler->op_count - 1, loop_op);
     fixup_jump(compiler, test_op, compiler->op_count);
     
     // evaluate exit expression
-    compile_list(compiler, test->cons.cdr, false);
+    compile_list(compiler, reg, test->cons.cdr, false);
     
     // pop scope
-    compiler->scope = scope.parent;
+    pop_scope(compiler);
+    
+	// free registers
+	compiler->free_reg = free_reg;
 }
 
-static void compile_whenunless(struct compiler_t* compiler, struct lusp_ast_node_t* args, bool unless)
+static void compile_whenunless(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* args, bool unless)
 {
 	check(compiler, args && args->type == LUSP_AST_CONS, "when/unless: malformed syntax");
 	
@@ -288,21 +344,24 @@ static void compile_whenunless(struct compiler_t* compiler, struct lusp_ast_node
 	struct lusp_ast_node_t* code = cdr;
 	
 	// evaluate condition
-	compile(compiler, cond);
+	compile(compiler, reg, cond);
 	
 	// jump over code
 	unsigned int jump_op = compiler->op_count;
 
-    emit_jump(compiler, unless ? LUSP_VMOP_JUMP_IF : LUSP_VMOP_JUMP_IFNOT, 0);
+    if (unless)
+		emit_jump_if(compiler, reg, 0);
+	else
+		emit_jump_ifnot(compiler, reg, 0);
 
 	// evaluate code
-	compile_list(compiler, code, false);
+	compile_list(compiler, reg, code, false);
 
 	// fixup jump
 	fixup_jump(compiler, jump_op, compiler->op_count);
 }
 
-static void compile_if(struct compiler_t* compiler, struct lusp_ast_node_t* args)
+static void compile_if(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* args)
 {
 	check(compiler, args && args->type == LUSP_AST_CONS, "if: malformed syntax");
 	
@@ -317,30 +376,30 @@ static void compile_if(struct compiler_t* compiler, struct lusp_ast_node_t* args
 	struct lusp_ast_node_t* elsecode = cdr->cons.cdr ? cdr->cons.cdr->cons.car : 0;
 	
 	// evaluate condition
-	compile(compiler, cond);
+	compile(compiler, reg, cond);
 	
 	// jump over if code
 	unsigned int jump_ifnot_op = compiler->op_count;
 	
-	emit_jump(compiler, LUSP_VMOP_JUMP_IFNOT, 0);
+	emit_jump_ifnot(compiler, reg, 0);
 	
 	// evaluate if code
-	compile(compiler, ifcode);
+	compile(compiler, reg, ifcode);
 	
 	// jump over else code
 	unsigned int jump_op = compiler->op_count;
 	
-	emit_jump(compiler, LUSP_VMOP_JUMP, 0);
+	emit_jump(compiler, 0);
 	
 	// else code
-	compile(compiler, elsecode);
+	compile(compiler, reg, elsecode);
 	
 	// fixup jumps
 	fixup_jump(compiler, jump_ifnot_op, jump_op + 1);
 	fixup_jump(compiler, jump_op, compiler->op_count);
 }
 
-static void compile_set(struct compiler_t* compiler, struct lusp_ast_node_t* args)
+static void compile_set(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* args)
 {
 	check(compiler, args && args->type == LUSP_AST_CONS, "set!: malformed syntax");
 	
@@ -351,10 +410,10 @@ static void compile_set(struct compiler_t* compiler, struct lusp_ast_node_t* arg
 	check(compiler, cdr && cdr->type == LUSP_AST_CONS && cdr->cons.cdr == 0, "set!: malformed syntax");
 	
 	// evaluate value
-	compile(compiler, cdr->cons.car);
+	compile(compiler, reg, cdr->cons.car);
 	
 	// set value
-    compile_symbol_getset(compiler, car->symbol, true);
+    compile_symbol_getset(compiler, reg, car->symbol, true);
 }
 
 static void compile_let_pushvardecl(struct compiler_t* compiler, struct scope_t* scope, struct lusp_ast_node_t* vardecl)
@@ -368,34 +427,31 @@ static void compile_let_pushvardecl(struct compiler_t* compiler, struct scope_t*
     check(compiler, decl && decl->type == LUSP_AST_CONS && decl->cons.cdr == 0, "let: malformed syntax");
 
     // add value to new scope
-    unsigned int index = compiler->local_count++;
+    unsigned int index = allocate_registers(compiler, 1);
     
     check(compiler, !find_bind_local(scope, var->symbol), "let: duplicate arguments detected");
     
     scope->binds[scope->bind_count].symbol = var->symbol;
     scope->binds[scope->bind_count].index = index;
+    scope->binds[scope->bind_count].has_upval = false;
     scope->bind_count++;
 
     // compute value in the old scope
-    compile(compiler, decl->cons.car);
-
-    // store value in locals
-    emit_getset_local(compiler, true, index);
+    compile(compiler, index, decl->cons.car);
 }
 
-static void compile_letseq_helper(struct compiler_t* compiler, struct lusp_ast_node_t* args, struct lusp_ast_node_t* body)
+static void compile_letseq_helper(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* args, struct lusp_ast_node_t* body)
 {
     // just compile the body if there are no arguments
 	if (!args)
 	{
-	    compile_list(compiler, body, false);
+	    compile_list(compiler, reg, body, false);
 	    return;
 	}
 	
 	// add new scope
 	struct scope_t scope;
 	scope.compiler = compiler;
-	scope.parent = compiler->scope;
 	scope.bind_count = 0;
 	
 	// add first binding
@@ -404,22 +460,27 @@ static void compile_letseq_helper(struct compiler_t* compiler, struct lusp_ast_n
 	compile_let_pushvardecl(compiler, &scope, args->cons.car);
 	
 	// evaluate the rest recursively in the new scope
-    compiler->scope = &scope;
-	compile_letseq_helper(compiler, args->cons.cdr, body);
-	compiler->scope = scope.parent;
+	push_scope(compiler, &scope);
+	compile_letseq_helper(compiler, reg, args->cons.cdr, body);
+	pop_scope(compiler);
 }
 
-static void compile_letseq(struct compiler_t* compiler, struct lusp_ast_node_t* args)
+static void compile_letseq(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* args)
 {
 	check(compiler, args && args->type == LUSP_AST_CONS, "let*: malformed syntax");
 	
 	struct lusp_ast_node_t* car = args->cons.car;
 	struct lusp_ast_node_t* cdr = args->cons.cdr;
 	
-	compile_letseq_helper(compiler, car, cdr);
+	unsigned int free_reg = compiler->free_reg;
+	
+	compile_letseq_helper(compiler, reg, car, cdr);
+	
+	// free registers for new scope vars
+	compiler->free_reg = free_reg;
 }
 
-static void compile_let(struct compiler_t* compiler, struct lusp_ast_node_t* args)
+static void compile_let(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* args)
 {
 	check(compiler, args && args->type == LUSP_AST_CONS, "let: malformed syntax");
 	
@@ -431,10 +492,11 @@ static void compile_let(struct compiler_t* compiler, struct lusp_ast_node_t* arg
 	// add new scope
 	struct scope_t scope;
 	scope.compiler = compiler;
-	scope.parent = compiler->scope;
 	scope.bind_count = 0;
 	
 	// fill new scope with arguments and compute values
+	unsigned int free_reg = compiler->free_reg;
+	
 	for (struct lusp_ast_node_t* vdlist = car; vdlist; vdlist = vdlist->cons.cdr)
 	{
 		check(compiler, vdlist->type == LUSP_AST_CONS, "let: malformed syntax");
@@ -443,12 +505,15 @@ static void compile_let(struct compiler_t* compiler, struct lusp_ast_node_t* arg
 	}
 	
 	// evaluate body in new scope
-	compiler->scope = &scope;
-	compile_list(compiler, cdr, false);
-	compiler->scope = scope.parent;
+	push_scope(compiler, &scope);
+	compile_list(compiler, reg, cdr, false);
+	pop_scope(compiler);
+	
+	// free registers for new scope vars
+	compiler->free_reg = free_reg;
 }
 
-static void compile_closure(struct compiler_t* parent, struct lusp_ast_node_t* args, struct lusp_ast_node_t* body)
+static void compile_closure(struct compiler_t* parent, unsigned int reg, struct lusp_ast_node_t* args, struct lusp_ast_node_t* body)
 {
 	struct compiler_t compiler;
 	
@@ -456,25 +521,25 @@ static void compile_closure(struct compiler_t* parent, struct lusp_ast_node_t* a
 	struct lusp_vm_bytecode_t* bytecode = create_closure(&compiler, parent, args, body);
 	
 	// create closure
-	emit_create_closure(parent, bytecode);
+	emit_create_closure(parent, reg, bytecode);
 	
 	// set upvalues
 	for (unsigned int i = 0; i < compiler.upval_count; ++i)
 	{
 		struct upval_t u = compiler.upvals[i];
 		
-		compile_bind_getset(parent, u.scope, u.binding, false);
+		compile_bind_getset(parent, 0, u.scope, u.binding, false);
 	}
 }
 
-static void compile_lambda(struct compiler_t* compiler, struct lusp_ast_node_t* args)
+static void compile_lambda(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* args)
 {
 	check(compiler, args && args->type == LUSP_AST_CONS, "lambda: malformed syntax");
 	
-	compile_closure(compiler, args->cons.car, args->cons.cdr);
+	compile_closure(compiler, reg, args->cons.car, args->cons.cdr);
 }
 
-static void compile_define(struct compiler_t* compiler, struct lusp_ast_node_t* args)
+static void compile_define(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* args)
 {
 	check(compiler, args && args->type == LUSP_AST_CONS, "define: malformed syntax");
 	
@@ -491,16 +556,16 @@ static void compile_define(struct compiler_t* compiler, struct lusp_ast_node_t* 
 	
 	// compile closure/value
 	if (car->type == LUSP_AST_CONS)
-    	compile_closure(compiler, car->cons.cdr, cdr);
+    	compile_closure(compiler, reg, car->cons.cdr, cdr);
 	else
 	{
 		check(compiler, !cdr || (cdr->type == LUSP_AST_CONS && cdr->cons.cdr == 0), "define: malformed syntax");
 		
-		compile(compiler, cdr ? cdr->cons.car : 0);
+		compile(compiler, reg, cdr ? cdr->cons.car : 0);
 	}
 	
-	// set value to slot
-	emit_getset_global(compiler, true, lusp_environment_get_slot(compiler->env, symbol)); // $$$ support local defines
+	// set value to slot ($$$ support local defines)
+	emit_loadstore_global(compiler, reg, lusp_environment_get_slot(compiler->env, symbol), true);
 }
 
 static struct lusp_object_t compile_quote_helper(struct compiler_t* compiler, struct lusp_ast_node_t* node)
@@ -522,19 +587,19 @@ static struct lusp_object_t compile_quote_helper(struct compiler_t* compiler, st
 	}
 }
 
-static void compile_quote(struct compiler_t* compiler, struct lusp_ast_node_t* args)
+static void compile_quote(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* args)
 {
 	check(compiler, args && args->type == LUSP_AST_CONS && args->cons.cdr == 0, "quote: malformed syntax");
 	
-	compile_object(compiler, compile_quote_helper(compiler, args->cons.car));
+	compile_object(compiler, reg, compile_quote_helper(compiler, args->cons.car));
 }
 
-static void compile_begin(struct compiler_t* compiler, struct lusp_ast_node_t* args)
+static void compile_begin(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* args)
 {
-	compile_list(compiler, args, false);
+	compile_list(compiler, reg, args, false);
 }
 
-static void compile_cons(struct compiler_t* compiler, struct lusp_ast_node_t* node)
+static void compile_cons(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* node)
 {
 	DL_ASSERT(node && node->type == LUSP_AST_CONS);
 	
@@ -547,60 +612,60 @@ static void compile_cons(struct compiler_t* compiler, struct lusp_ast_node_t* no
 	{
 	case LUSP_AST_SYMBOL:
 	case LUSP_AST_CONS:
-		return compile_call(compiler, func, args);
+		return compile_call(compiler, reg, func, args);
 		
 	case LUSP_AST_SYMBOL_QUOTE:
-		return compile_quote(compiler, args);
+		return compile_quote(compiler, reg, args);
 		
 	case LUSP_AST_SYMBOL_BEGIN:
-		return compile_begin(compiler, args);
+		return compile_begin(compiler, reg, args);
 		
 	case LUSP_AST_SYMBOL_DEFINE:
-		return compile_define(compiler, args);
+		return compile_define(compiler, reg, args);
 		
 	case LUSP_AST_SYMBOL_LAMBDA:
-		return compile_lambda(compiler, args);
+		return compile_lambda(compiler, reg, args);
 		
 	case LUSP_AST_SYMBOL_LET:
-		return compile_let(compiler, args);
+		return compile_let(compiler, reg, args);
 		
 	case LUSP_AST_SYMBOL_LETSEQ:
-		return compile_letseq(compiler, args);
+		return compile_letseq(compiler, reg, args);
 		
 	case LUSP_AST_SYMBOL_SET:
-		return compile_set(compiler, args);
+		return compile_set(compiler, reg, args);
 		
 	case LUSP_AST_SYMBOL_IF:
-		return compile_if(compiler, args);
+		return compile_if(compiler, reg, args);
 		
 	case LUSP_AST_SYMBOL_WHEN:
-		return compile_whenunless(compiler, args, false);
+		return compile_whenunless(compiler, reg, args, false);
 		
 	case LUSP_AST_SYMBOL_UNLESS:
-		return compile_whenunless(compiler, args, true);
+		return compile_whenunless(compiler, reg, args, true);
 		
 	case LUSP_AST_SYMBOL_DO:
-		return compile_do(compiler, args);
+		return compile_do(compiler, reg, args);
 		
 	default:
 		check(compiler, false, "invalid function call");
 	}
 }
 
-static void compile(struct compiler_t* compiler, struct lusp_ast_node_t* node)
+static void compile(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* node)
 {
-	if (!node) return compile_object(compiler, lusp_mknull());
+	if (!node) return compile_object(compiler, reg, lusp_mknull());
 	
 	switch (node->type)
 	{
 	case LUSP_AST_SYMBOL:
-		return compile_symbol(compiler, node);
+		return compile_symbol(compiler, reg, node);
 	
 	case LUSP_AST_LITERAL:
-		return compile_literal(compiler, node);
+		return compile_literal(compiler, reg, node);
 		
 	case LUSP_AST_CONS:
-		return compile_cons(compiler, node);
+		return compile_cons(compiler, reg, node);
  
 	default:
 		check(compiler, false, "unknown node type");
@@ -609,14 +674,13 @@ static void compile(struct compiler_t* compiler, struct lusp_ast_node_t* node)
 
 static void compile_closure_code(struct compiler_t* compiler, struct lusp_ast_node_t* args, struct lusp_ast_node_t* body)
 {
+	DL_ASSERT(compiler->free_reg == 0);
+	
     // add top-level scope
     struct scope_t scope;
     scope.compiler = compiler;
-    scope.parent = compiler->scope;
     scope.bind_count = 0;
 
-    compiler->scope = &scope;
-    
     // fill scope with arguments
     bool rest = false;
     
@@ -632,7 +696,8 @@ static void compile_closure_code(struct compiler_t* compiler, struct lusp_ast_no
         check(compiler, !find_bind_local(&scope, symbol), "lambda: duplicate arguments detected");
 
         scope.binds[scope.bind_count].symbol = symbol;
-        scope.binds[scope.bind_count].index = compiler->local_count++;
+        scope.binds[scope.bind_count].index = allocate_registers(compiler, 1);
+        scope.binds[scope.bind_count].has_upval = false;
         scope.bind_count++;
         
         if (rest) break;
@@ -641,11 +706,16 @@ static void compile_closure_code(struct compiler_t* compiler, struct lusp_ast_no
     // create list for rest
     if (rest) emit_create_list(compiler, scope.bind_count - 1);
     
+    // allocate register for return value
+    unsigned int reg = allocate_registers(compiler, 1);
+    
     // compile body
-    compile_list(compiler, body, false);
+    push_scope(compiler, &scope);
+    compile_list(compiler, reg, body, false);
+    pop_scope(compiler);
     
     // return
-    emit_return(compiler);
+    emit_return(compiler, reg);
 }
 
 static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, struct compiler_t* parent, struct lusp_ast_node_t* args, struct lusp_ast_node_t* body)
@@ -653,9 +723,8 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, st
     // create compiler
     compiler->env = parent->env;
     compiler->scope = parent->scope;
-    compiler->local_count = 0;
-    compiler->temp_count = 0;
-    compiler->current_temp_count = 0;
+    compiler->free_reg = 0;
+    compiler->reg_count = 0;
     compiler->upval_count = 0;
     compiler->op_count = 0;
     compiler->flags = parent->flags;
@@ -676,8 +745,7 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, st
     DL_ASSERT(code);
     
     code->env = parent->env;
-    code->local_count = compiler->local_count;
-    code->temp_count = compiler->temp_count;
+    code->reg_count = compiler->reg_count;
     code->upval_count = compiler->upval_count;
     code->ops = ops;
     code->op_count = compiler->op_count;
