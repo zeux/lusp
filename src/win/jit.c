@@ -17,6 +17,8 @@ void* allocate_code()
 	return VirtualAlloc(0, 16*1024, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
 }
 
+struct lusp_vm_upval_t dummy_upval = {};
+
 // ecx = ref, edx = unused
 static struct lusp_vm_upval_t* __fastcall jit_mkupval(struct lusp_object_t* ref, unsigned int unused, struct lusp_vm_upval_t** list)
 {
@@ -25,9 +27,9 @@ static struct lusp_vm_upval_t* __fastcall jit_mkupval(struct lusp_object_t* ref,
 	return mkupval(list, ref);
 }
 
-static struct lusp_vm_upval_t* __fastcall jit_close_upvals(struct lusp_vm_upval_t* list, struct lusp_object_t* begin, struct lusp_object_t* end)
+static struct lusp_vm_upval_t* __fastcall jit_close_upvals(struct lusp_vm_upval_t* list, struct lusp_object_t* begin)
 {
-	return close_upvals(list, begin, end);
+	return close_upvals(list, begin);
 }
 
 static struct lusp_object_t __fastcall jit_create_list(struct lusp_object_t* end, struct lusp_object_t* begin)
@@ -49,7 +51,7 @@ static inline uint8_t* compile_prologue(uint8_t* code)
 	PUSH_REG(EDI);
 	
 	// store upval list on stack
-	PUSH_IMM8(0);
+	PUSH_IMM32(&dummy_upval);
 	
 	// assuming the following declaration, load arguments from stack:
 	// typedef struct lusp_object_t (*lusp_vm_evaluator_t)(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t* regs, unsigned int arg_count);
@@ -353,10 +355,8 @@ static inline uint8_t* compile_create_list(uint8_t* code, struct lusp_vm_op_t op
 
 static inline uint8_t* compile_close(uint8_t* code, struct lusp_vm_op_t op)
 {
-	// push arguments (upval list, begin, end)
+	// push arguments (upval list, begin)
 	POP_REG(ECX);
-	LEA_REG_PREG_OFF32(EDX, ESI, op.close.end * sizeof(struct lusp_object_t));
-	PUSH_REG(EDX);
 	LEA_REG_PREG_OFF32(EDX, ESI, op.close.begin * sizeof(struct lusp_object_t));
 	
 	// close

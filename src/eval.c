@@ -9,10 +9,12 @@
 #include <lusp/object.h>
 #include <lusp/evalutils.h>
 
+static struct lusp_vm_upval_t dummy_upval = {};
+
 static struct lusp_object_t eval(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t* regs, unsigned int arg_count)
 {
     struct lusp_vm_op_t* pc = code->ops;
-    struct lusp_vm_upval_t* upvals = 0;
+    struct lusp_vm_upval_t* upvals = &dummy_upval;
 
     for (;;)
     {
@@ -113,7 +115,7 @@ static struct lusp_object_t eval(struct lusp_vm_bytecode_t* code, struct lusp_vm
             break;
             
         case LUSP_VMOP_CLOSE:
-			upvals = close_upvals(upvals, regs + op.close.begin, regs + op.close.end);
+			upvals = close_upvals(upvals, regs + op.close.begin);
 			break;
             
 		default:

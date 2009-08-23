@@ -53,9 +53,8 @@ static inline unsigned int find_upval(struct compiler_t* compiler, struct scope_
 			return i;
 		}
 		
-	// mark binding
-	DL_ASSERT(!binding->has_upval);
-	binding->has_upval = true;
+	// mark scope
+	scope->has_upvals = true;
 	
 	// add new upval
 	compiler->upvals[compiler->upval_count].binding = binding;
@@ -70,24 +69,12 @@ static inline void push_scope(struct compiler_t* compiler, struct scope_t* scope
 	compiler->scope = scope;
 }
 
-static inline void pop_scope(struct compiler_t* compiler)
+static inline void pop_scope(struct compiler_t* compiler, unsigned int first_reg)
 {
 	struct scope_t* scope = compiler->scope;
 	
-	// look for bindings that need to be closed
-	unsigned int upval_begin = ~0u, upval_end = 0;
-	
-	for (unsigned int i = 0; i < scope->bind_count; ++i)
-		if (scope->binds[i].has_upval)
-		{
-			unsigned int index = scope->binds[i].index;
-			
-			upval_begin = min(upval_begin, index);
-			upval_end = max(upval_end, index + 1);
-		}
-		
 	// close bindings
-	if (upval_begin < upval_end) emit_close(compiler, upval_begin, upval_end);
+	if (scope->has_upvals) emit_close(compiler, first_reg);
 	
 	compiler->scope = scope->parent;
 }
@@ -271,6 +258,7 @@ static void compile_do(struct compiler_t* compiler, unsigned int reg, struct lus
     struct scope_t scope;
     scope.compiler = compiler;
     scope.bind_count = 0;
+    scope.has_upvals = false;
 
     // process init steps
 	unsigned int free_reg = compiler->free_reg;
@@ -288,7 +276,6 @@ static void compile_do(struct compiler_t* compiler, unsigned int reg, struct lus
         // add new variable to scope
         scope.binds[scope.bind_count].symbol = vars[i].var->symbol;
         scope.binds[scope.bind_count].index = index;
-        scope.binds[scope.bind_count].has_upval = false;
         scope.bind_count++;
     }
     
@@ -325,7 +312,7 @@ static void compile_do(struct compiler_t* compiler, unsigned int reg, struct lus
     compile_list(compiler, reg, test->cons.cdr, false);
     
     // pop scope
-    pop_scope(compiler);
+    pop_scope(compiler, free_reg);
     
 	// free registers
 	compiler->free_reg = free_reg;
@@ -433,7 +420,6 @@ static void compile_let_pushvardecl(struct compiler_t* compiler, struct scope_t*
     
     scope->binds[scope->bind_count].symbol = var->symbol;
     scope->binds[scope->bind_count].index = index;
-    scope->binds[scope->bind_count].has_upval = false;
     scope->bind_count++;
 
     // compute value in the old scope
@@ -453,6 +439,7 @@ static void compile_letseq_helper(struct compiler_t* compiler, unsigned int reg,
 	struct scope_t scope;
 	scope.compiler = compiler;
 	scope.bind_count = 0;
+	scope.has_upvals = false;
 	
 	// add first binding
 	check(compiler, args && args->type == LUSP_AST_CONS, "let*: malformed syntax");
@@ -462,7 +449,7 @@ static void compile_letseq_helper(struct compiler_t* compiler, unsigned int reg,
 	// evaluate the rest recursively in the new scope
 	push_scope(compiler, &scope);
 	compile_letseq_helper(compiler, reg, args->cons.cdr, body);
-	pop_scope(compiler);
+	pop_scope(compiler, scope.binds[0].index);
 }
 
 static void compile_letseq(struct compiler_t* compiler, unsigned int reg, struct lusp_ast_node_t* args)
@@ -493,6 +480,7 @@ static void compile_let(struct compiler_t* compiler, unsigned int reg, struct lu
 	struct scope_t scope;
 	scope.compiler = compiler;
 	scope.bind_count = 0;
+	scope.has_upvals = false;
 	
 	// fill new scope with arguments and compute values
 	unsigned int free_reg = compiler->free_reg;
@@ -507,7 +495,7 @@ static void compile_let(struct compiler_t* compiler, unsigned int reg, struct lu
 	// evaluate body in new scope
 	push_scope(compiler, &scope);
 	compile_list(compiler, reg, cdr, false);
-	pop_scope(compiler);
+	pop_scope(compiler, free_reg);
 	
 	// free registers for new scope vars
 	compiler->free_reg = free_reg;
@@ -680,6 +668,7 @@ static void compile_closure_code(struct compiler_t* compiler, struct lusp_ast_no
     struct scope_t scope;
     scope.compiler = compiler;
     scope.bind_count = 0;
+    scope.has_upvals = false;
 
     // fill scope with arguments
     bool rest = false;
@@ -697,7 +686,6 @@ static void compile_closure_code(struct compiler_t* compiler, struct lusp_ast_no
 
         scope.binds[scope.bind_count].symbol = symbol;
         scope.binds[scope.bind_count].index = allocate_registers(compiler, 1);
-        scope.binds[scope.bind_count].has_upval = false;
         scope.bind_count++;
         
         if (rest) break;
@@ -712,7 +700,7 @@ static void compile_closure_code(struct compiler_t* compiler, struct lusp_ast_no
     // compile body
     push_scope(compiler, &scope);
     compile_list(compiler, reg, body, false);
-    pop_scope(compiler);
+    pop_scope(compiler, 0);
     
     // return
     emit_return(compiler, reg);

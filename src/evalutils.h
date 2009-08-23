@@ -24,9 +24,9 @@ static inline struct lusp_vm_upval_t* mkupval(struct lusp_vm_upval_t** list, str
     return result;
 }
 
-static inline struct lusp_vm_upval_t* close_upvals(struct lusp_vm_upval_t* list, struct lusp_object_t* begin, struct lusp_object_t* end)
+static inline struct lusp_vm_upval_t* close_upvals(struct lusp_vm_upval_t* list, struct lusp_object_t* begin)
 {
-    while (list && list->ref >= begin && list->ref < end)
+    while (list->ref >= begin)
     {
         struct lusp_vm_upval_t* next = list->next;
         

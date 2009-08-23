@@ -92,11 +92,10 @@ static inline void emit_create_list(struct compiler_t* compiler, unsigned int re
     emit(compiler, op, LUSP_VMOP_CREATE_LIST, reg);
 }
 
-static inline void emit_close(struct compiler_t* compiler, unsigned int begin, unsigned int end)
+static inline void emit_close(struct compiler_t* compiler, unsigned int begin)
 {
 	struct lusp_vm_op_t op;
-	op.close.begin = (unsigned short)begin;
-	op.close.end = (unsigned short)end;
+	op.close.begin = begin;
 	emit(compiler, op, LUSP_VMOP_CLOSE, 0);
 }
 

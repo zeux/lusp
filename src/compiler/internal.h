@@ -11,7 +11,6 @@ struct binding_t
 {
 	struct lusp_object_t symbol;
 	unsigned int index;
-	bool has_upval;
 };
 
 struct scope_t
@@ -22,6 +21,8 @@ struct scope_t
 	
 	struct binding_t binds[1024];
 	unsigned int bind_count;
+	
+	bool has_upvals;
 };
 
 struct upval_t

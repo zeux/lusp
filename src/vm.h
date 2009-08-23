@@ -72,8 +72,7 @@ struct lusp_vm_op_t
 		
 		struct 
 		{
-			uint16_t begin;
-			uint16_t end;
+			unsigned int begin;
 		} close;
 		
 		uint32_t dummy;

@@ -89,7 +89,7 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, b
 			break;
 			
 		case LUSP_VMOP_CLOSE:
-			printf("close r%d, r%d\n", op->close.begin, op->close.end);
+			printf("close r%d\n", op->close.begin);
 			break;
 			
 		default:
