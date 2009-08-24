@@ -49,7 +49,7 @@
 #define JNE_IMM8(label) EMIT8(0x75), label = CODE(), EMIT8(0)
 
 #define LABEL8(label) *(uint8_t*)label = (uint8_t)(uintptr_t)(CODE() - label - 1)
-#define LABEL32(label, code) *(uint32_t*)label = (uint32_t)(uintptr_t)(CODE() - label - 4)
+#define LABEL32(label, code) *(uint32_t*)label = (uint32_t)(uintptr_t)(code - label - 4)
 
 #define CMP_REG_IMM8(reg, value) EMIT8(0x83), EMIT8(0xF8 + reg), EMIT8(value)
 
