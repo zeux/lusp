@@ -40,5 +40,15 @@ struct lusp_object_t lusp_eval(struct lusp_object_t object)
 
     struct lusp_object_t eval_stack[1024];
 
-    return g_evaluator(object.closure->code, 0, eval_stack, 0);
+	// setup top-level frame
+	eval_stack[0].type = LUSP_OBJECT_CALL_FRAME;
+	
+	struct lusp_vm_call_frame_t* frame = (struct lusp_vm_call_frame_t*)eval_stack[0].call_frame;
+	
+	frame->regs = 0;
+	frame->closure = 0;
+	frame->pc = 0;
+	
+	// call
+    return g_evaluator(object.closure->code, object.closure, eval_stack + 2, 0);
 }

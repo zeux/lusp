@@ -17,7 +17,8 @@ enum lusp_object_type_t
 	LUSP_OBJECT_CONS,
 	LUSP_OBJECT_CLOSURE,
 	LUSP_OBJECT_FUNCTION,
-	LUSP_OBJECT_OBJECT
+	LUSP_OBJECT_OBJECT,
+	LUSP_OBJECT_CALL_FRAME,
 };
 
 struct lusp_symbol_t
@@ -41,6 +42,7 @@ struct lusp_object_t
 		struct lusp_vm_closure_t* closure;
 		void* function;
 		void* object;
+		char call_frame[1];
 	};
 };
 

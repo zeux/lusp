@@ -55,9 +55,19 @@ struct lusp_object_t lusp_eval_vm(struct lusp_vm_bytecode_t* code, struct lusp_v
             
             if (func.type == LUSP_OBJECT_CLOSURE)
             {
-                struct lusp_vm_bytecode_t* code = func.closure->code;
-                
-				regs[op.reg] = lusp_eval_vm(code, func.closure, args, count);
+                // store call frame
+                args[-2].type = LUSP_OBJECT_CALL_FRAME;
+				struct lusp_vm_call_frame_t* frame = (struct lusp_vm_call_frame_t*)args[-2].call_frame;
+				
+				frame->closure = closure;
+				frame->pc = pc;
+				frame->regs = regs;
+				
+				// transfer control
+				regs = args;
+				closure = func.closure;
+				pc = closure->code->ops;
+				arg_count = count;
             }
             else
             {
@@ -66,7 +76,24 @@ struct lusp_object_t lusp_eval_vm(struct lusp_vm_bytecode_t* code, struct lusp_v
         } break;
             
         case LUSP_VMOP_RETURN:
-            return regs[op.reg];
+        {
+			DL_ASSERT(regs[-2].type == LUSP_OBJECT_CALL_FRAME);
+			
+			struct lusp_vm_call_frame_t* frame = (struct lusp_vm_call_frame_t*)regs[-2].call_frame;
+			struct lusp_object_t* result = regs + op.reg;
+			
+			// top-level return
+			if (frame->regs == 0) return *result;
+			
+			// restore regs
+			regs = frame->regs;
+			closure = frame->closure;
+			pc = frame->pc;
+			
+			// store result
+			DL_ASSERT((pc - 1)->opcode == LUSP_VMOP_CALL);
+			regs[(pc - 1)->reg] = *result;
+        } break;
             
         case LUSP_VMOP_JUMP:
             pc = pc + op.jump.offset - 1;

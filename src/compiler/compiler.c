@@ -179,9 +179,10 @@ static void compile_call(struct compiler_t* compiler, unsigned int reg, struct l
 {
 	unsigned int free_reg = compiler->free_reg;
 	
-	// allocate registers for function arguments
+	// allocate registers for function arguments and for call frame
 	unsigned int arg_count = list_length(args);
-	unsigned int arg_regs = allocate_registers(compiler, arg_count);
+	unsigned int frame_regs = allocate_registers(compiler, arg_count + 2);
+	unsigned int arg_regs = frame_regs + 2;
 	
 	// evaluate function arguments left to right
 	compile_list(compiler, arg_regs, args, true);
