@@ -114,8 +114,6 @@ struct lusp_vm_bytecode_t
 	unsigned int op_count;
 
 	void* jit;
-	
-	lusp_vm_evaluator_t evaluator;
 };
 
 void lusp_dump_bytecode(struct lusp_vm_bytecode_t* code, bool deep);

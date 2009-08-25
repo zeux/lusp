@@ -6,6 +6,7 @@
 
 #include <lusp/object.h>
 #include <lusp/memory.h>
+#include <lusp/eval.h>
 
 bool lusp_init(struct mem_arena_t* arena, unsigned int heap_size)
 {
@@ -14,6 +15,9 @@ bool lusp_init(struct mem_arena_t* arena, unsigned int heap_size)
 	
 	// initialize builtin objects
 	if (!lusp_object_init()) return false;
+	
+	// disable JIT by default
+	lusp_jit_set(false);
 	
 	return true;
 }

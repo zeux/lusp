@@ -7,11 +7,10 @@
 #include <lusp/compiler/parser.h>
 
 #include <lusp/object.h>
-#include <lusp/vm.h>
 #include <lusp/environment.h>
-#include <lusp/eval.h>
 #include <lusp/memory.h>
 #include <lusp/compile.h>
+#include <lusp/vm/bytecode.h>
 
 #include <lusp/compiler/internal.h>
 #include <lusp/compiler/codegen.h>
@@ -738,8 +737,6 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, st
     code->ops = ops;
     code->op_count = compiler->op_count;
 	code->jit = 0;
-	
-	lusp_bytecode_setup(code);
 	
     return code;
 }

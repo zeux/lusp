@@ -2,16 +2,15 @@
 
 #include <core/common.h>
 
-#include <lusp/eval.h>
-
-#include <lusp/vm.h>
 #include <lusp/environment.h>
 #include <lusp/object.h>
-#include <lusp/evalutils.h>
+
+#include <lusp/vm/bytecode.h>
+#include <lusp/vm/utils.h>
 
 static struct lusp_vm_upval_t dummy_upval = {};
 
-static struct lusp_object_t eval(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t* regs, unsigned int arg_count)
+struct lusp_object_t lusp_eval_vm(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t* regs, unsigned int arg_count)
 {
     struct lusp_vm_op_t* pc = code->ops;
     struct lusp_vm_upval_t* upvals = &dummy_upval;
@@ -58,7 +57,7 @@ static struct lusp_object_t eval(struct lusp_vm_bytecode_t* code, struct lusp_vm
             {
                 struct lusp_vm_bytecode_t* code = func.closure->code;
                 
-				regs[op.reg] = code->evaluator(code, func.closure, args, count);
+				regs[op.reg] = lusp_eval_vm(code, func.closure, args, count);
             }
             else
             {
@@ -122,20 +121,4 @@ static struct lusp_object_t eval(struct lusp_vm_bytecode_t* code, struct lusp_vm
 		    DL_ASSERT(!"unexpected instruction");
         }
     }
-}
-
-struct lusp_object_t lusp_eval(struct lusp_object_t object)
-{
-	if (object.type != LUSP_OBJECT_CLOSURE) return lusp_mknull();
-	
-	struct lusp_object_t eval_stack[1024];
-	
-	struct lusp_vm_bytecode_t* code = object.closure->code;
-	
-    return code->evaluator(code, 0, eval_stack, 0);
-}
-
-void lusp_bytecode_setup(struct lusp_vm_bytecode_t* code)
-{
-	code->evaluator = eval;
 }

@@ -2,7 +2,7 @@
 
 #include <core/common.h>
 
-#include <lusp/vm.h>
+#include <lusp/vm/bytecode.h>
 
 #include <lusp/write.h>
 #include <lusp/environment.h>

@@ -2,9 +2,9 @@
 
 #pragma once
 
-#include <lusp/vm.h>
 #include <lusp/object.h>
 #include <lusp/memory.h>
+#include <lusp/vm/bytecode.h>
 
 static inline struct lusp_vm_upval_t* mkupval(struct lusp_vm_upval_t** list, struct lusp_object_t* ref)
 {

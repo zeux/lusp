@@ -4,7 +4,7 @@
 
 #include <lusp/object.h>
 
-#include <lusp/vm.h>
+#include <lusp/vm/bytecode.h>
 #include <lusp/memory.h>
 
 #include <core/string.h>
