@@ -18,7 +18,7 @@ static inline bool is_delimiter(char data)
 	return is_whitespace(data) || data == '(' || data == ')' || data == '"' || data == ';' || data == 0;
 }
 
-static inline char tolower(char data)
+static inline char to_lower(char data)
 {
 	return (unsigned char)(data - 'A') < 26 ? data - 'A' + 'a' : data;
 }
@@ -141,7 +141,7 @@ static inline int parse_integer(struct lusp_lexer_t* lexer, int base, const char
 	do
 	{
 		// handle both decimal and hexadecimal digits
-		int digit = is_digit(ch) ? ch - '0' : tolower(ch) - 'a' + 10;
+		int digit = is_digit(ch) ? ch - '0' : to_lower(ch) - 'a' + 10;
 		
 		check(lexer, digit >= 0 && digit < base, message);
 		
@@ -167,7 +167,7 @@ static inline float parse_real(struct lusp_lexer_t* lexer, int integer, int sign
 	for (char ch = peekchar(lexer); !is_delimiter(ch); ch = nextchar(lexer))
 	{
 		// read exponent part
-		if (tolower(ch) == 'e')
+		if (to_lower(ch) == 'e')
 		{
 			nextchar(lexer);
 			return parse_real_exp(lexer, integer + fractional, sign);
@@ -204,7 +204,7 @@ static inline enum lusp_lexeme_t parse_number(struct lusp_lexer_t* lexer, bool n
 		}
 		
 		// read exponent part
-		if (tolower(ch) == 'e')
+		if (to_lower(ch) == 'e')
 		{
 			nextchar(lexer);
 			lexer->value.real = parse_real_exp(lexer, (float)result, sign);
@@ -229,7 +229,7 @@ static inline enum lusp_lexeme_t parse_sharp_literal(struct lusp_lexer_t* lexer)
 	DL_ASSERT(peekchar(lexer) == '#');
 	
 	// parse literal
-	switch (tolower(nextchar(lexer)))
+	switch (to_lower(nextchar(lexer)))
 	{
 	case 't':
 		nextchar(lexer);

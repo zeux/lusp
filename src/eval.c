@@ -6,7 +6,7 @@
 
 #include <lusp/vm/bytecode.h>
 
-static lusp_vm_evaluator_t g_lusp_evaluator;
+static lusp_vm_evaluator_t g_evaluator;
 
 // available evaluator functions
 struct lusp_object_t lusp_eval_vm(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t* regs, unsigned int arg_count);
@@ -18,16 +18,17 @@ struct lusp_object_t lusp_eval_jit_x86(struct lusp_vm_bytecode_t* code, struct l
 void lusp_jit_set(bool enabled)
 {
 #if DL_WINDOWS
-    g_lusp_evaluator = enabled ? lusp_eval_jit_x86 : lusp_eval_vm;
+    g_evaluator = enabled ? lusp_eval_jit_x86 : lusp_eval_vm;
 #else
-    g_lusp_evaluator = lusp_eval_vm;
+    (void)enabled;
+    g_evaluator = lusp_eval_vm;
 #endif
 }
 
 bool lusp_jit_get()
 {
 #if DL_WINDOWS
-    return g_lusp_evaluator == lusp_eval_jit_x86;
+    return g_evaluator == lusp_eval_jit_x86;
 #else
     return false;
 #endif
@@ -39,5 +40,5 @@ struct lusp_object_t lusp_eval(struct lusp_object_t object)
 
     struct lusp_object_t eval_stack[1024];
 
-    return g_lusp_evaluator(object.closure->code, 0, eval_stack, 0);
+    return g_evaluator(object.closure->code, 0, eval_stack, 0);
 }

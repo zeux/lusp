@@ -18,7 +18,7 @@ void* allocate_code()
 	return VirtualAlloc(0, 16*1024, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
 }
 
-struct lusp_vm_upval_t dummy_upval = {};
+static struct lusp_vm_upval_t g_dummy_upval = {0, {{LUSP_OBJECT_NULL, {0}}}};
 
 // ecx = ref, edx = unused
 static struct lusp_vm_upval_t* __fastcall jit_mkupval(struct lusp_object_t* ref, unsigned int unused, struct lusp_vm_upval_t** list)
@@ -52,7 +52,7 @@ static inline uint8_t* compile_prologue(uint8_t* code)
 	PUSH_REG(EDI);
 	
 	// store upval list on stack
-	PUSH_IMM(&dummy_upval);
+	PUSH_IMM(&g_dummy_upval);
 	
 	// assuming the following declaration, load arguments from stack:
 	// typedef struct lusp_object_t (*lusp_vm_evaluator_t)(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t* regs, unsigned int arg_count);
