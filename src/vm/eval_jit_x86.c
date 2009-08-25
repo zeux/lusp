@@ -20,8 +20,6 @@ void* allocate_code()
 
 struct lusp_vm_upval_t dummy_upval = {};
 
-static void compile_jit(struct lusp_vm_bytecode_t* code);
-
 // ecx = ref, edx = unused
 static struct lusp_vm_upval_t* __fastcall jit_mkupval(struct lusp_object_t* ref, unsigned int unused, struct lusp_vm_upval_t** list)
 {
@@ -278,9 +276,6 @@ static inline uint8_t* compile_jump_cond(uint8_t* code, struct lusp_vm_op_t op)
 
 static inline uint8_t* compile_create_closure(uint8_t* code, struct lusp_vm_op_t op, struct lusp_vm_op_t* upval_ops)
 {
-	// compile bytecode recursively
-	compile_jit(op.create_closure.code);
-	
 	unsigned int upval_count = op.create_closure.code->upval_count;
 
 	// push arguments (bytecode, upvalue count)
@@ -458,17 +453,22 @@ static void compile(uint8_t* code, struct lusp_environment_t* env, struct lusp_v
 
 static void compile_jit(struct lusp_vm_bytecode_t* code)
 {
-	if (code->jit) return;
-	
 	code->jit = allocate_code();
 	
 	compile((unsigned char*)code->jit, code->env, code->ops, code->op_count);
 }
 
+struct lusp_object_t lusp_eval_jit_x86_stub(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t* regs, unsigned int arg_count)
+{
+    if (code->jit == lusp_eval_jit_x86_stub) compile_jit(code);
+    
+    lusp_vm_evaluator_t function = (lusp_vm_evaluator_t)code->jit;
+    
+    return function(code, closure, regs, arg_count);
+}
+
 struct lusp_object_t lusp_eval_jit_x86(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t* regs, unsigned int arg_count)
 {
-    if (!code->jit) compile_jit(code);
-    
     lusp_vm_evaluator_t function = (lusp_vm_evaluator_t)code->jit;
     
     return function(code, closure, regs, arg_count);

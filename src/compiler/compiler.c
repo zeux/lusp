@@ -736,7 +736,8 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler, st
     code->upval_count = compiler->upval_count;
     code->ops = ops;
     code->op_count = compiler->op_count;
-	code->jit = 0;
+    
+    lusp_setup_bytecode(code);
 	
     return code;
 }

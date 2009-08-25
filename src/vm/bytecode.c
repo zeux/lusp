@@ -102,3 +102,14 @@ void lusp_dump_bytecode(struct lusp_vm_bytecode_t* code, bool deep)
 {
     dump_bytecode(code, "", deep);
 }
+
+void lusp_setup_bytecode(struct lusp_vm_bytecode_t* code)
+{
+#if DL_WINDOWS
+    struct lusp_object_t lusp_eval_jit_x86_stub(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t* regs, unsigned int arg_count);
+    
+    code->jit = lusp_eval_jit_x86_stub;
+#else
+    code->jit = 0;
+#endif
+}

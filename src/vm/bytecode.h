@@ -117,3 +117,4 @@ struct lusp_vm_bytecode_t
 };
 
 void lusp_dump_bytecode(struct lusp_vm_bytecode_t* code, bool deep);
+void lusp_setup_bytecode(struct lusp_vm_bytecode_t* code);
