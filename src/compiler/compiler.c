@@ -123,7 +123,7 @@ static void compile_symbol_getset(struct compiler_t* compiler, unsigned int reg,
 {
 	DL_ASSERT(symbol.type == LUSP_OBJECT_SYMBOL);
 	
-	struct scope_t* scope;
+	struct scope_t* scope = 0;
 	struct binding_t* bind = find_bind(compiler, symbol, &scope);
 	
 	if (bind)
