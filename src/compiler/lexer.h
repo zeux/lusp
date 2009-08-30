@@ -10,14 +10,18 @@ enum lusp_lexeme_t
 	LUSP_LEXEME_LITERAL_INTEGER,
 	LUSP_LEXEME_LITERAL_REAL,
 	LUSP_LEXEME_LITERAL_STRING,
-	LUSP_LEXEME_SYMBOL,
+	LUSP_LEXEME_OPEN_PAREN,
+	LUSP_LEXEME_CLOSE_PAREN,
 	LUSP_LEXEME_OPEN_BRACE,
 	LUSP_LEXEME_CLOSE_BRACE,
-	LUSP_LEXEME_QUOTE,
-	LUSP_LEXEME_BACKQUOTE,
 	LUSP_LEXEME_COMMA,
-	LUSP_LEXEME_COMMA_AT,
-	LUSP_LEXEME_DOT
+	LUSP_LEXEME_DOT,
+	LUSP_LEXEME_EQUAL,
+	LUSP_LEXEME_VERTICAL_BAR,
+	LUSP_LEXEME_SYMBOL,
+	LUSP_LEXEME_SYMBOL_LET,
+	LUSP_LEXEME_SYMBOL_IF,
+	LUSP_LEXEME_SYMBOL_ELSE,
 };
 
 union lusp_lexeme_value_t
@@ -31,7 +35,7 @@ union lusp_lexeme_value_t
 
 struct lusp_lexer_t;
 
-typedef void (*lusp_lexer_error_handler_t)(struct lusp_lexer_t* lexer, const char* message);
+typedef void (*lusp_lexer_error_handler_t)(struct lusp_lexer_t* lexer, const char* message, ...);
 
 struct lusp_lexer_t
 {

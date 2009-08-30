@@ -15,7 +15,7 @@ static inline bool is_whitespace(char data)
 
 static inline bool is_delimiter(char data)
 {
-	return is_whitespace(data) || data == '(' || data == ')' || data == '"' || data == ';' || data == 0;
+	return is_whitespace(data) || data == '(' || data == ')' || data == '"' || data == ';' || data == ',' || data == '|' || data == '=' || data == '{' || data == '}' || data == 0;
 }
 
 static inline char to_lower(char data)
@@ -120,6 +120,27 @@ static inline void parse_symbol(struct lusp_lexer_t* lexer)
 	
 	// this is safe since buffer is one byte larger than buffer_end tells us
 	*buffer = 0;
+}
+
+static inline enum lusp_lexeme_t get_symbol_lexeme(const char* value)
+{
+	switch (*value)
+	{
+	case 'e':
+		if (str_is_equal(value, "else")) return LUSP_LEXEME_SYMBOL_ELSE;
+		return LUSP_LEXEME_SYMBOL;
+		
+	case 'i':
+		if (str_is_equal(value, "if")) return LUSP_LEXEME_SYMBOL_IF;
+		return LUSP_LEXEME_SYMBOL;
+		
+	case 'l':
+		if (str_is_equal(value, "let")) return LUSP_LEXEME_SYMBOL_LET;
+		return LUSP_LEXEME_SYMBOL;
+		
+	default:
+		return LUSP_LEXEME_SYMBOL;
+	}
 }
 
 static inline int parse_sign(struct lusp_lexer_t* lexer)
@@ -340,36 +361,42 @@ enum lusp_lexeme_t lusp_lexer_next(struct lusp_lexer_t* lexer)
 		
 	case '(':
 		nextchar(lexer);
-		lexer->lexeme = LUSP_LEXEME_OPEN_BRACE;
+		lexer->lexeme = LUSP_LEXEME_OPEN_PAREN;
 		break;
 		
 	case ')':
 		nextchar(lexer);
+		lexer->lexeme = LUSP_LEXEME_CLOSE_PAREN;
+		break;
+		
+	case '{':
+		nextchar(lexer);
+		lexer->lexeme = LUSP_LEXEME_OPEN_BRACE;
+		break;
+		
+	case '}':
+		nextchar(lexer);
 		lexer->lexeme = LUSP_LEXEME_CLOSE_BRACE;
 		break;
 		
-	case '\'':
-		nextchar(lexer);
-		lexer->lexeme = LUSP_LEXEME_QUOTE;
-		break;
-		
-	case '`':
-		nextchar(lexer);
-		lexer->lexeme = LUSP_LEXEME_BACKQUOTE;
-		break;
-		
 	case ',':
-		if (nextchar(lexer) == '@')
-		{
-			nextchar(lexer);
-			lexer->lexeme = LUSP_LEXEME_COMMA_AT;
-		}
-		else lexer->lexeme = LUSP_LEXEME_COMMA;
+		nextchar(lexer);
+		lexer->lexeme = LUSP_LEXEME_COMMA;
+		break;
+		
+	case '=':
+		nextchar(lexer);
+		lexer->lexeme = LUSP_LEXEME_EQUAL;
+		break;
+		
+	case '|':
+		nextchar(lexer);
+		lexer->lexeme = LUSP_LEXEME_VERTICAL_BAR;
 		break;
 		
 	default:
 		parse_symbol(lexer);
-		lexer->lexeme = LUSP_LEXEME_SYMBOL;
+		lexer->lexeme = get_symbol_lexeme(lexer->value.symbol);
 	}
 	
 	return lexer->lexeme;

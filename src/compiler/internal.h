@@ -2,9 +2,6 @@
 
 #pragma once
 
-#include <setjmp.h>
-#include <stdio.h>
-
 struct compiler_t;
 
 struct binding_t
@@ -53,17 +50,6 @@ struct compiler_t
 	
 	// compilation parameters
 	unsigned int flags;
-	
-	// error facilities
-	jmp_buf* error;
 };
 
-static inline void check(struct compiler_t* compiler, bool condition, const char* message)
-{
-	if (!condition)
-	{
-		printf("error: compile failed (%s)\n", message);
-
-		longjmp(*compiler->error, 1);
-	}
-}
+#define CHECK(condition, message, ...) do { if (!(condition)) lexer->error_handler(lexer, message, ## __VA_ARGS__); } while (0)

@@ -5,17 +5,25 @@
 #include <lusp/compile.h>
 
 #include <lusp/compiler/lexer.h>
-#include <lusp/compiler/parser.h>
 #include <lusp/compiler/compiler.h>
 
 #include <mem/arena.h>
 
 #include <setjmp.h>
 #include <stdio.h>
+#include <stdarg.h>
 
-void error_handler(struct lusp_lexer_t* lexer, const char* message)
+void error_handler(struct lusp_lexer_t* lexer, const char* message, ...)
 {
-    printf("error: compile failed (%s)\n", message);
+    printf("error: compile failed (");
+    
+	va_list list;
+	
+	va_start(list, message);
+    vprintf(message, list);
+    va_end(list);
+    
+    printf(") at line %d\n", lexer->lexeme_line);
 
     longjmp(*(jmp_buf*)lexer->error_context, 1);
 }
@@ -35,9 +43,7 @@ struct lusp_object_t lusp_compile(struct lusp_environment_t* env, struct mem_are
 
     lusp_lexer_init(&lexer, string, &buf, error_handler);
 
-    struct lusp_ast_node_t* ast = lusp_parse(&lexer, arena);
-
-    struct lusp_object_t bytecode = lusp_compile_ast(env, ast, flags);
+    struct lusp_object_t bytecode = lusp_compile_ex(env, &lexer, arena, flags);
     
     mem_arena_restore(arena, marker);
     
