@@ -239,8 +239,8 @@ static void compile_call(struct lusp_lexer_t* lexer, struct compiler_t* compiler
 
 static void compile_assign(struct lusp_lexer_t* lexer, struct compiler_t* compiler, unsigned int reg, struct lusp_object_t symbol)
 {
-	// skip equal sign
-	DL_ASSERT(lexer->lexeme == LUSP_LEXEME_EQUAL);
+	// skip assign sign
+	DL_ASSERT(lexer->lexeme == LUSP_LEXEME_ASSIGN);
 	lusp_lexer_next(lexer);
 	
 	// evaluate expression
@@ -268,7 +268,7 @@ static void compile_let(struct lusp_lexer_t* lexer, struct compiler_t* compiler,
 	struct binding_t* bind = add_bind(compiler, compiler->scope, symbol);
 	
 	// is it assigned right away?
-	if (lexer->lexeme == LUSP_LEXEME_EQUAL)
+	if (lexer->lexeme == LUSP_LEXEME_ASSIGN)
 		compile_assign(lexer, compiler, reg, symbol);
 	else
 		emit_move(compiler, reg, bind->index);
@@ -435,7 +435,7 @@ static void compile_term(struct lusp_lexer_t* lexer, struct compiler_t* compiler
 		
 	case LUSP_LEXEME_VERTICAL_BAR:
 		return compile_closure(lexer, compiler, reg);
-		
+	
 	case LUSP_LEXEME_SYMBOL:
 	{
 		struct lusp_object_t symbol = lusp_mksymbol(lexer->value.symbol);
@@ -445,7 +445,7 @@ static void compile_term(struct lusp_lexer_t* lexer, struct compiler_t* compiler
 		case LUSP_LEXEME_OPEN_PAREN:
 			return compile_call(lexer, compiler, reg, symbol);
 			
-		case LUSP_LEXEME_EQUAL:
+		case LUSP_LEXEME_ASSIGN:
 			return compile_assign(lexer, compiler, reg, symbol);
 			
 		default:

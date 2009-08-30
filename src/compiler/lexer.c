@@ -8,6 +8,26 @@
 
 #include <math.h>
 
+static const bool g_delimiter_table[256] =
+{
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0-15, whitespace symbols
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 16-31, whitespace symbols
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 32-47, space, !"#$%&'()*+,-./
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, // 48-63, :;<=>?
+	1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 64-79, @
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, // 80-95, [\]^
+	1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 96-111, `
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, // 112-127, {|}~
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 128-143
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 144-159
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 160-175
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 176-191
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 192-207
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 208-223
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 224-239
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 240-255
+};
+
 static inline bool is_whitespace(char data)
 {
 	return (unsigned char)(data - 1) < ' ';
@@ -15,7 +35,7 @@ static inline bool is_whitespace(char data)
 
 static inline bool is_delimiter(char data)
 {
-	return is_whitespace(data) || data == '(' || data == ')' || data == '"' || data == ';' || data == ',' || data == '|' || data == '=' || data == '{' || data == '}' || data == 0;
+	return g_delimiter_table[(unsigned char)data];
 }
 
 static inline char to_lower(char data)
@@ -302,6 +322,9 @@ void lusp_lexer_init(struct lusp_lexer_t* lexer, const char* data, void* error_c
 
 enum lusp_lexeme_t lusp_lexer_next(struct lusp_lexer_t* lexer)
 {
+#define CHAR(c, lex) case c: nextchar(lexer); lexer->lexeme = lex; break
+#define CHAR2(c1, c2, lex1, lex2) case c1: if (nextchar(lexer) == c2) nextchar(lexer), lexer->lexeme = lex2; else lexer->lexeme = lex1; break
+
 	// skip whitespaces
 	skipws(lexer);
 	
@@ -323,20 +346,12 @@ enum lusp_lexeme_t lusp_lexer_next(struct lusp_lexer_t* lexer)
 		break;
 		
 	case '+':
-		if (is_delimiter(nextchar(lexer)))
-		{
-			str_copy(lexer->value.symbol, sizeof(lexer->value.symbol), "+");
-			lexer->lexeme = LUSP_LEXEME_SYMBOL;
-		}
+		if (is_delimiter(nextchar(lexer))) lexer->lexeme = LUSP_LEXEME_ADD;
 		else lexer->lexeme = parse_number(lexer, false);
 		break;
 		
 	case '-':
-		if (is_delimiter(nextchar(lexer)))
-		{
-			str_copy(lexer->value.symbol, sizeof(lexer->value.symbol), "-");
-			lexer->lexeme = LUSP_LEXEME_SYMBOL;
-		}
+		if (is_delimiter(nextchar(lexer))) lexer->lexeme = LUSP_LEXEME_SUBTRACT;
 		else lexer->lexeme = parse_number(lexer, true);
 		break;
 		
@@ -359,45 +374,27 @@ enum lusp_lexeme_t lusp_lexer_next(struct lusp_lexer_t* lexer)
 		lexer->lexeme = parse_number(lexer, false);
 		break;
 		
-	case '(':
-		nextchar(lexer);
-		lexer->lexeme = LUSP_LEXEME_OPEN_PAREN;
-		break;
-		
-	case ')':
-		nextchar(lexer);
-		lexer->lexeme = LUSP_LEXEME_CLOSE_PAREN;
-		break;
-		
-	case '{':
-		nextchar(lexer);
-		lexer->lexeme = LUSP_LEXEME_OPEN_BRACE;
-		break;
-		
-	case '}':
-		nextchar(lexer);
-		lexer->lexeme = LUSP_LEXEME_CLOSE_BRACE;
-		break;
-		
-	case ',':
-		nextchar(lexer);
-		lexer->lexeme = LUSP_LEXEME_COMMA;
-		break;
-		
-	case '=':
-		nextchar(lexer);
-		lexer->lexeme = LUSP_LEXEME_EQUAL;
-		break;
-		
-	case '|':
-		nextchar(lexer);
-		lexer->lexeme = LUSP_LEXEME_VERTICAL_BAR;
-		break;
-		
+	CHAR('(', LUSP_LEXEME_OPEN_PAREN);
+	CHAR(')', LUSP_LEXEME_CLOSE_PAREN);
+	CHAR('{', LUSP_LEXEME_OPEN_BRACE);
+	CHAR('}', LUSP_LEXEME_CLOSE_BRACE);
+	CHAR(',', LUSP_LEXEME_COMMA);
+	CHAR('|', LUSP_LEXEME_VERTICAL_BAR);
+	CHAR('*', LUSP_LEXEME_MULTIPLY);
+	CHAR('/', LUSP_LEXEME_DIVIDE);
+	CHAR('%', LUSP_LEXEME_MODULO);
+	
+	CHAR2('=', '=', LUSP_LEXEME_ASSIGN, LUSP_LEXEME_EQUAL);
+	CHAR2('>', '=', LUSP_LEXEME_GREATER, LUSP_LEXEME_GREATER_EQUAL);
+	CHAR2('<', '=', LUSP_LEXEME_LESS, LUSP_LEXEME_LESS_EQUAL);
+	CHAR2('!', '=', LUSP_LEXEME_UNKNOWN, LUSP_LEXEME_NOT_EQUAL);
+	
 	default:
 		parse_symbol(lexer);
 		lexer->lexeme = get_symbol_lexeme(lexer->value.symbol);
 	}
 	
 	return lexer->lexeme;
+	
+#undef CHAR
 }
