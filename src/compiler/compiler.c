@@ -417,6 +417,20 @@ static void compile_closure(struct lusp_lexer_t* lexer, struct compiler_t* compi
 	}
 }
 
+static void compile_parens(struct lusp_lexer_t* lexer, struct compiler_t* compiler, unsigned int reg)
+{
+	// skip open paren
+	DL_ASSERT(lexer->lexeme == LUSP_LEXEME_OPEN_PAREN);
+	lusp_lexer_next(lexer);
+	
+	// evaluate expression
+	compile_expr(lexer, compiler, reg);
+	
+	// skip close paren
+	CHECK(lexer->lexeme == LUSP_LEXEME_CLOSE_PAREN, "expected close paren");
+	lusp_lexer_next(lexer);
+}
+
 static void compile_term(struct lusp_lexer_t* lexer, struct compiler_t* compiler, unsigned int reg)
 {
 	switch (lexer->lexeme)
@@ -436,6 +450,9 @@ static void compile_term(struct lusp_lexer_t* lexer, struct compiler_t* compiler
 	case LUSP_LEXEME_VERTICAL_BAR:
 		return compile_closure(lexer, compiler, reg);
 	
+	case LUSP_LEXEME_OPEN_PAREN:
+		return compile_parens(lexer, compiler, reg);
+		
 	case LUSP_LEXEME_SYMBOL:
 	{
 		struct lusp_object_t symbol = lusp_mksymbol(lexer->value.symbol);
@@ -458,6 +475,172 @@ static void compile_term(struct lusp_lexer_t* lexer, struct compiler_t* compiler
 	}
 }
 
+static void compile_addexpr(struct lusp_lexer_t* lexer, struct compiler_t* compiler, unsigned int reg)
+{
+	// evaluate left expression
+	compile_term(lexer, compiler, reg);
+	
+	while (lexer->lexeme == LUSP_LEXEME_ADD || lexer->lexeme == LUSP_LEXEME_SUBTRACT)
+	{
+		// consume lexeme
+		enum lusp_lexeme_t lexeme = lexer->lexeme;
+		lusp_lexer_next(lexer);
+		
+		// allocate register
+		unsigned int free_reg = compiler->free_reg;
+		unsigned int temp_reg = allocate_registers(compiler, 1);
+		
+		// evaluate right expression
+		compile_term(lexer, compiler, temp_reg);
+		
+		// evaluate relop
+		switch (lexeme)
+		{
+		case LUSP_LEXEME_ADD:
+			emit_binop(compiler, LUSP_VMOP_ADD, reg, reg, temp_reg);
+			break;
+			
+		case LUSP_LEXEME_SUBTRACT:
+			emit_binop(compiler, LUSP_VMOP_SUBTRACT, reg, reg, temp_reg);
+			break;
+			
+		default:
+			DL_ASSERT(false);
+		}
+		
+		// free register
+		compiler->free_reg = free_reg;
+	}
+}
+
+static void compile_mulexpr(struct lusp_lexer_t* lexer, struct compiler_t* compiler, unsigned int reg)
+{
+	// evaluate left expression
+	compile_addexpr(lexer, compiler, reg);
+	
+	while (lexer->lexeme == LUSP_LEXEME_MULTIPLY || lexer->lexeme == LUSP_LEXEME_DIVIDE ||
+		lexer->lexeme == LUSP_LEXEME_MODULO)
+	{
+		// consume lexeme
+		enum lusp_lexeme_t lexeme = lexer->lexeme;
+		lusp_lexer_next(lexer);
+		
+		// allocate register
+		unsigned int free_reg = compiler->free_reg;
+		unsigned int temp_reg = allocate_registers(compiler, 1);
+		
+		// evaluate right expression
+		compile_addexpr(lexer, compiler, temp_reg);
+		
+		// evaluate relop
+		switch (lexeme)
+		{
+		case LUSP_LEXEME_MULTIPLY:
+			emit_binop(compiler, LUSP_VMOP_MULTIPLY, reg, reg, temp_reg);
+			break;
+			
+		case LUSP_LEXEME_DIVIDE:
+			emit_binop(compiler, LUSP_VMOP_DIVIDE, reg, reg, temp_reg);
+			break;
+			
+		case LUSP_LEXEME_MODULO:
+			emit_binop(compiler, LUSP_VMOP_MODULO, reg, reg, temp_reg);
+			break;
+			
+		default:
+			DL_ASSERT(false);
+		}
+		
+		// free register
+		compiler->free_reg = free_reg;
+	}
+}
+
+static void compile_relexpr(struct lusp_lexer_t* lexer, struct compiler_t* compiler, unsigned int reg)
+{
+	// evaluate left expression
+	compile_mulexpr(lexer, compiler, reg);
+	
+	while (lexer->lexeme == LUSP_LEXEME_LESS || lexer->lexeme == LUSP_LEXEME_LESS_EQUAL ||
+		lexer->lexeme == LUSP_LEXEME_GREATER || lexer->lexeme == LUSP_LEXEME_GREATER_EQUAL)
+	{
+		// consume lexeme
+		enum lusp_lexeme_t lexeme = lexer->lexeme;
+		lusp_lexer_next(lexer);
+		
+		// allocate register
+		unsigned int free_reg = compiler->free_reg;
+		unsigned int temp_reg = allocate_registers(compiler, 1);
+		
+		// evaluate right expression
+		compile_mulexpr(lexer, compiler, temp_reg);
+		
+		// evaluate relop
+		switch (lexeme)
+		{
+		case LUSP_LEXEME_LESS:
+			emit_binop(compiler, LUSP_VMOP_LESS, reg, reg, temp_reg);
+			break;
+			
+		case LUSP_LEXEME_LESS_EQUAL:
+			emit_binop(compiler, LUSP_VMOP_LESS_EQUAL, reg, reg, temp_reg);
+			break;
+			
+		case LUSP_LEXEME_GREATER:
+			emit_binop(compiler, LUSP_VMOP_GREATER, reg, reg, temp_reg);
+			break;
+			
+		case LUSP_LEXEME_GREATER_EQUAL:
+			emit_binop(compiler, LUSP_VMOP_GREATER_EQUAL, reg, reg, temp_reg);
+			break;
+			
+		default:
+			DL_ASSERT(false);
+		}
+		
+		// free register
+		compiler->free_reg = free_reg;
+	}
+}
+
+static void compile_eqexpr(struct lusp_lexer_t* lexer, struct compiler_t* compiler, unsigned int reg)
+{
+	// evaluate left expression
+	compile_relexpr(lexer, compiler, reg);
+	
+	while (lexer->lexeme == LUSP_LEXEME_EQUAL || lexer->lexeme == LUSP_LEXEME_NOT_EQUAL)
+	{
+		// consume lexeme
+		enum lusp_lexeme_t lexeme = lexer->lexeme;
+		lusp_lexer_next(lexer);
+		
+		// allocate register
+		unsigned int free_reg = compiler->free_reg;
+		unsigned int temp_reg = allocate_registers(compiler, 1);
+		
+		// evaluate right expression
+		compile_relexpr(lexer, compiler, temp_reg);
+		
+		// evaluate relop
+		switch (lexeme)
+		{
+		case LUSP_LEXEME_EQUAL:
+			emit_binop(compiler, LUSP_VMOP_EQUAL, reg, reg, temp_reg);
+			break;
+			
+		case LUSP_LEXEME_NOT_EQUAL:
+			emit_binop(compiler, LUSP_VMOP_NOT_EQUAL, reg, reg, temp_reg);
+			break;
+			
+		default:
+			DL_ASSERT(false);
+		}
+		
+		// free register
+		compiler->free_reg = free_reg;
+	}
+}
+
 static void compile_expr(struct lusp_lexer_t* lexer, struct compiler_t* compiler, unsigned int reg)
 {
 	switch (lexer->lexeme)
@@ -469,7 +652,7 @@ static void compile_expr(struct lusp_lexer_t* lexer, struct compiler_t* compiler
 		return compile_if(lexer, compiler, reg);
 	
 	default:
-		return compile_term(lexer, compiler, reg);
+		return compile_eqexpr(lexer, compiler, reg);
 	}
 }
 
