@@ -258,7 +258,7 @@ static inline enum lusp_lexeme_t parse_number(struct lusp_lexer_t* lexer, bool n
 		
 		result = result * 10 + digit;
 	}
-	while (!is_delimiter(ch = nextchar(lexer)));
+	while (!is_delimiter(ch = nextchar(lexer)) || ch == '.');
 	
 	lexer->value.integer = sign * result;
 	return LUSP_LEXEME_LITERAL_INTEGER;
