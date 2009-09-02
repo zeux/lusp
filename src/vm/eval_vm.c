@@ -96,15 +96,15 @@ struct lusp_object_t lusp_eval_vm(struct lusp_vm_bytecode_t* code, struct lusp_v
         } break;
             
         case LUSP_VMOP_JUMP:
-            pc = pc + op.jump.offset - 1;
+            pc += op.jump.offset;
             break;
             
         case LUSP_VMOP_JUMP_IF:
-            if (regs[op.reg].type != LUSP_OBJECT_BOOLEAN || regs[op.reg].boolean) pc = pc + op.jump.offset - 1;
+			if (regs[op.reg].type != LUSP_OBJECT_BOOLEAN || regs[op.reg].boolean) pc += op.jump.offset;
             break;
             
         case LUSP_VMOP_JUMP_IFNOT:
-            if (regs[op.reg].type == LUSP_OBJECT_BOOLEAN && !regs[op.reg].boolean) pc = pc + op.jump.offset - 1;
+            if (regs[op.reg].type == LUSP_OBJECT_BOOLEAN && !regs[op.reg].boolean) pc += op.jump.offset;
             break;
             
         case LUSP_VMOP_CREATE_CLOSURE:

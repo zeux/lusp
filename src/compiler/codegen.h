@@ -110,5 +110,5 @@ static inline void fixup_jump(struct compiler_t* compiler, unsigned int jump, un
     struct lusp_vm_op_t* op = &compiler->ops[jump];
     
     DL_ASSERT(op->opcode == LUSP_VMOP_JUMP || op->opcode == LUSP_VMOP_JUMP_IF || op->opcode == LUSP_VMOP_JUMP_IFNOT);
-	op->jump.offset = (int)dest - (int)jump;
+	op->jump.offset = (int)dest - (int)jump - 1;
 }

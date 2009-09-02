@@ -490,7 +490,7 @@ static void compile(uint8_t* code, struct lusp_environment_t* env, struct lusp_v
 		
 		if (op.opcode != LUSP_VMOP_JUMP && op.opcode != LUSP_VMOP_JUMP_IF && op.opcode != LUSP_VMOP_JUMP_IFNOT) continue;
 		
-		LABEL32(jumps[i], labels[i + op.jump.offset]);
+		LABEL32(jumps[i], labels[i + op.jump.offset + 1]);
 	}
 }
 
