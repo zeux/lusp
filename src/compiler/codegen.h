@@ -85,13 +85,6 @@ static inline void emit_create_closure(struct compiler_t* compiler, unsigned int
     emit(compiler, op, LUSP_VMOP_CREATE_CLOSURE, reg);
 }
 
-static inline void emit_create_list(struct compiler_t* compiler, unsigned int reg)
-{
-    struct lusp_vm_op_t op;
-    op.dummy = 0;
-    emit(compiler, op, LUSP_VMOP_CREATE_LIST, reg);
-}
-
 static inline void emit_close(struct compiler_t* compiler, unsigned int begin)
 {
 	struct lusp_vm_op_t op;

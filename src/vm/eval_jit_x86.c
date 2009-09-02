@@ -33,11 +33,6 @@ static struct lusp_vm_upval_t* __fastcall jit_close_upvals(struct lusp_vm_upval_
 	return close_upvals(list, begin);
 }
 
-static struct lusp_object_t __fastcall jit_create_list(struct lusp_object_t* end, struct lusp_object_t* begin)
-{
-	return create_list(begin, end);
-}
-
 // registers:
 // ebx: closure
 // esi: regs
@@ -331,24 +326,6 @@ static inline uint8_t* compile_create_closure(uint8_t* code, struct lusp_vm_op_t
 	return compile_store_reg(code, op.reg);
 }
 
-static inline uint8_t* compile_create_list(uint8_t* code, struct lusp_vm_op_t op)
-{
-	size_t offset = op.reg * sizeof(struct lusp_object_t);
-	
-	// compute end of range
-	SHL_REG_IMM8(ECX, 3);
-	ADD_REG_REG(ECX, ESI);
-	
-	// compute start of range
-	LEA_REG_PREG_OFF(EDX, ESI, offset);
-	
-	// create list
-	CALL_FUNC(jit_create_list);
-	
-	// store to reg
-	return compile_store_reg(code, op.reg);
-}
-
 static inline uint8_t* compile_close(uint8_t* code, struct lusp_vm_op_t op)
 {
 	// push arguments (upval list, begin)
@@ -425,10 +402,6 @@ static void compile(uint8_t* code, struct lusp_environment_t* env, struct lusp_v
 			
 			// skip upvalue instructions
 			i += op.create_closure.code->upval_count;
-			break;
-			
-		case LUSP_VMOP_CREATE_LIST:
-			code = compile_create_list(code, op);
 			break;
 			
 		case LUSP_VMOP_CLOSE:

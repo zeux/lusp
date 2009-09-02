@@ -136,10 +136,6 @@ struct lusp_object_t lusp_eval_vm(struct lusp_vm_bytecode_t* code, struct lusp_v
             }
         } break;
         
-        case LUSP_VMOP_CREATE_LIST:
-            regs[op.reg] = create_list(regs + op.reg, regs + arg_count);
-            break;
-            
         case LUSP_VMOP_CLOSE:
 			upvals = close_upvals(upvals, regs + op.close.begin);
 			break;

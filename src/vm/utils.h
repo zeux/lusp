@@ -38,22 +38,3 @@ static inline struct lusp_vm_upval_t* close_upvals(struct lusp_vm_upval_t* list,
     
     return list;
 }
-
-static inline struct lusp_object_t create_list(struct lusp_object_t* begin, struct lusp_object_t* end)
-{
-    DL_ASSERT(begin <= end);
-    
-    struct lusp_object_t head = lusp_mknull();
-    struct lusp_object_t tail = lusp_mknull();
-    
-    for (struct lusp_object_t* i = begin; i != end; ++i)
-    {
-        struct lusp_object_t cell = lusp_mkcons(*i, lusp_mknull());
-        
-        if (tail.type != LUSP_OBJECT_NULL) tail = tail.cons[1] = cell;
-        else head = tail = cell;
-    }
-    
-    return head;
-}
-
