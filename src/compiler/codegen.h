@@ -92,6 +92,19 @@ static inline void emit_close(struct compiler_t* compiler, unsigned int begin)
 	emit(compiler, op, LUSP_VMOP_CLOSE, 0);
 }
 
+static inline void emit_binop(struct compiler_t* compiler, enum lusp_vm_opcode_t opcode, unsigned int reg, unsigned int left, unsigned int right)
+{
+	DL_ASSERT(opcode == LUSP_VMOP_ADD || opcode == LUSP_VMOP_SUBTRACT || opcode == LUSP_VMOP_MULTIPLY ||
+		opcode == LUSP_VMOP_DIVIDE || opcode == LUSP_VMOP_MODULO || opcode == LUSP_VMOP_EQUAL ||
+		opcode == LUSP_VMOP_NOT_EQUAL || opcode == LUSP_VMOP_LESS || opcode == LUSP_VMOP_LESS_EQUAL ||
+		opcode == LUSP_VMOP_GREATER || opcode == LUSP_VMOP_GREATER_EQUAL);
+		
+	struct lusp_vm_op_t op;
+	op.binop.left = (uint16_t)left;
+	op.binop.right = (uint16_t)right;
+	emit(compiler, op, opcode, reg);
+}
+
 static inline void fixup_jump(struct compiler_t* compiler, unsigned int jump, unsigned int dest)
 {
     struct lusp_vm_op_t* op = &compiler->ops[jump];

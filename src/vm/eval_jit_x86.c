@@ -33,6 +33,19 @@ static struct lusp_vm_upval_t* __fastcall jit_close_upvals(struct lusp_vm_upval_
 	return close_upvals(list, begin);
 }
 
+#define BINOP(func) \
+	static struct lusp_object_t __fastcall jit_binop_##func(struct lusp_object_t* left, struct lusp_object_t* right) \
+	{ \
+		return binop_##func(left, right); \
+	}
+	
+typedef struct lusp_object_t (__fastcall *binop_function_t)(struct lusp_object_t*, struct lusp_object_t*);
+
+BINOP(add); BINOP(subtract); BINOP(multiply); BINOP(divide); BINOP(modulo);
+BINOP(equal); BINOP(not_equal); BINOP(less); BINOP(less_equal); BINOP(greater); BINOP(greater_equal);
+
+#undef BINOP
+
 // registers:
 // ebx: closure
 // esi: regs
@@ -341,6 +354,19 @@ static inline uint8_t* compile_close(uint8_t* code, struct lusp_vm_op_t op)
 	return code;
 }
 
+static inline uint8_t* compile_binop(uint8_t* code, struct lusp_vm_op_t op, binop_function_t function)
+{
+	// push arguments (left, right)
+	LEA_REG_PREG_OFF(ECX, ESI, op.binop.left * sizeof(struct lusp_object_t));
+	LEA_REG_PREG_OFF(EDX, ESI, op.binop.right * sizeof(struct lusp_object_t));
+	
+	// call function
+	CALL_FUNC(function);
+	
+	// store to reg
+	return compile_store_reg(code, op.reg);
+}
+
 static void compile(uint8_t* code, struct lusp_environment_t* env, struct lusp_vm_op_t* ops, unsigned int op_count)
 {
 	uint8_t* labels[1024];
@@ -406,6 +432,50 @@ static void compile(uint8_t* code, struct lusp_environment_t* env, struct lusp_v
 			
 		case LUSP_VMOP_CLOSE:
 			code = compile_close(code, op);
+			break;
+			
+		case LUSP_VMOP_ADD:
+			code = compile_binop(code, op, jit_binop_add);
+			break;
+			
+		case LUSP_VMOP_SUBTRACT:
+			code = compile_binop(code, op, jit_binop_subtract);
+			break;
+
+		case LUSP_VMOP_MULTIPLY:
+			code = compile_binop(code, op, jit_binop_multiply);
+			break;
+
+		case LUSP_VMOP_DIVIDE:
+			code = compile_binop(code, op, jit_binop_divide);
+			break;
+
+		case LUSP_VMOP_MODULO:
+			code = compile_binop(code, op, jit_binop_modulo);
+			break;
+
+		case LUSP_VMOP_EQUAL:
+			code = compile_binop(code, op, jit_binop_equal);
+			break;
+
+		case LUSP_VMOP_NOT_EQUAL:
+			code = compile_binop(code, op, jit_binop_not_equal);
+			break;
+
+		case LUSP_VMOP_LESS:
+			code = compile_binop(code, op, jit_binop_less);
+			break;
+
+		case LUSP_VMOP_LESS_EQUAL:
+			code = compile_binop(code, op, jit_binop_less_equal);
+			break;
+
+		case LUSP_VMOP_GREATER:
+			code = compile_binop(code, op, jit_binop_greater);
+			break;
+
+		case LUSP_VMOP_GREATER_EQUAL:
+			code = compile_binop(code, op, jit_binop_greater_equal);
 			break;
 
 		default:

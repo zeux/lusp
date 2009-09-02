@@ -22,7 +22,19 @@ enum lusp_vm_opcode_t
 	LUSP_VMOP_JUMP_IF,
 	LUSP_VMOP_JUMP_IFNOT,
 	LUSP_VMOP_CREATE_CLOSURE,
-	LUSP_VMOP_CLOSE
+	LUSP_VMOP_CLOSE,
+	
+	LUSP_VMOP_ADD,
+	LUSP_VMOP_SUBTRACT,
+	LUSP_VMOP_MULTIPLY,
+	LUSP_VMOP_DIVIDE,
+	LUSP_VMOP_MODULO,
+	LUSP_VMOP_EQUAL,
+	LUSP_VMOP_NOT_EQUAL,
+	LUSP_VMOP_LESS,
+	LUSP_VMOP_LESS_EQUAL,
+	LUSP_VMOP_GREATER,
+	LUSP_VMOP_GREATER_EQUAL
 };
 
 struct lusp_vm_op_t
@@ -73,6 +85,12 @@ struct lusp_vm_op_t
 		{
 			unsigned int begin;
 		} close;
+		
+		struct 
+		{
+			uint16_t left;
+			uint16_t right;
+		} binop;
 		
 		uint32_t dummy;
 	};

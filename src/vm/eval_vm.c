@@ -139,6 +139,22 @@ struct lusp_object_t lusp_eval_vm(struct lusp_vm_bytecode_t* code, struct lusp_v
         case LUSP_VMOP_CLOSE:
 			upvals = close_upvals(upvals, regs + op.close.begin);
 			break;
+			
+	#define BINOP(opcode, func) case opcode: regs[op.reg] = func(regs + op.binop.left, regs + op.binop.right); break
+	
+		BINOP(LUSP_VMOP_ADD, binop_add);
+		BINOP(LUSP_VMOP_SUBTRACT, binop_subtract);
+		BINOP(LUSP_VMOP_MULTIPLY, binop_multiply);
+		BINOP(LUSP_VMOP_DIVIDE, binop_divide);
+		BINOP(LUSP_VMOP_MODULO, binop_modulo);
+		BINOP(LUSP_VMOP_EQUAL, binop_equal);
+		BINOP(LUSP_VMOP_NOT_EQUAL, binop_not_equal);
+		BINOP(LUSP_VMOP_LESS, binop_less);
+		BINOP(LUSP_VMOP_LESS_EQUAL, binop_less_equal);
+		BINOP(LUSP_VMOP_GREATER, binop_greater);
+		BINOP(LUSP_VMOP_GREATER_EQUAL, binop_greater_equal);
+		
+	#undef BINOP
             
 		default:
 		    DL_ASSERT(!"unexpected instruction");

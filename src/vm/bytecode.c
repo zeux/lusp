@@ -88,6 +88,50 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, b
 			printf("close r%d\n", op->close.begin);
 			break;
 			
+		case LUSP_VMOP_ADD:
+			printf("add r%d, r%d, r%d\n", op->reg, op->binop.left, op->binop.right);
+			break;
+			
+		case LUSP_VMOP_SUBTRACT:
+			printf("subtract r%d, r%d, r%d\n", op->reg, op->binop.left, op->binop.right);
+			break;
+			
+		case LUSP_VMOP_MULTIPLY:
+			printf("multiply r%d, r%d, r%d\n", op->reg, op->binop.left, op->binop.right);
+			break;
+			
+		case LUSP_VMOP_DIVIDE:
+			printf("divide r%d, r%d, r%d\n", op->reg, op->binop.left, op->binop.right);
+			break;
+			
+		case LUSP_VMOP_MODULO:
+			printf("modulo r%d, r%d, r%d\n", op->reg, op->binop.left, op->binop.right);
+			break;
+			
+		case LUSP_VMOP_EQUAL:
+			printf("equal r%d, r%d, r%d\n", op->reg, op->binop.left, op->binop.right);
+			break;
+			
+		case LUSP_VMOP_NOT_EQUAL:
+			printf("not_equal r%d, r%d, r%d\n", op->reg, op->binop.left, op->binop.right);
+			break;
+			
+		case LUSP_VMOP_LESS:
+			printf("less r%d, r%d, r%d\n", op->reg, op->binop.left, op->binop.right);
+			break;
+			
+		case LUSP_VMOP_LESS_EQUAL:
+			printf("less_equal r%d, r%d, r%d\n", op->reg, op->binop.left, op->binop.right);
+			break;
+			
+		case LUSP_VMOP_GREATER:
+			printf("greater r%d, r%d, r%d\n", op->reg, op->binop.left, op->binop.right);
+			break;
+			
+		case LUSP_VMOP_GREATER_EQUAL:
+			printf("greater_equal r%d, r%d, r%d\n", op->reg, op->binop.left, op->binop.right);
+			break;
+			
 		default:
 			printf("unknown\n");
 		}
