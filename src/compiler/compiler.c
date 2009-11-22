@@ -349,6 +349,9 @@ static void compile_closure_body(struct lusp_lexer_t* lexer, struct compiler_t* 
 	scope.bind_count = 0;
 	scope.has_upvals = false;
 
+	// remember last free register (should always be 0?)
+	unsigned int free_reg = compiler->free_reg;
+	
 	if (!global)
 	{
 		// skip vertical bar
@@ -382,8 +385,6 @@ static void compile_closure_body(struct lusp_lexer_t* lexer, struct compiler_t* 
 	// allocate register for return value
 	unsigned int ret_reg = allocate_registers(compiler, 1);
 
-	unsigned int free_reg = compiler->free_reg;
-	
 	// evaluate body in new scope
 	push_scope(compiler, &scope);
 	global ? compile_list(lexer, compiler, ret_reg, LUSP_LEXEME_EOF) : compile_block(lexer, compiler, ret_reg);
