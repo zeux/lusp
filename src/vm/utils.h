@@ -6,7 +6,7 @@
 #include <lusp/memory.h>
 #include <lusp/vm/bytecode.h>
 
-static inline struct lusp_vm_upval_t* mkupval(struct lusp_vm_upval_t** list, struct lusp_object_t* ref)
+inline struct lusp_vm_upval_t* mkupval(struct lusp_vm_upval_t** list, struct lusp_object_t* ref)
 {
     // look for ref in list
     for (struct lusp_vm_upval_t* upval = *list; upval; upval = upval->next)
@@ -24,7 +24,7 @@ static inline struct lusp_vm_upval_t* mkupval(struct lusp_vm_upval_t** list, str
     return result;
 }
 
-static inline struct lusp_vm_upval_t* close_upvals(struct lusp_vm_upval_t* list, struct lusp_object_t* begin)
+inline struct lusp_vm_upval_t* close_upvals(struct lusp_vm_upval_t* list, struct lusp_object_t* begin)
 {
     while (list->ref >= begin)
     {
@@ -40,7 +40,7 @@ static inline struct lusp_vm_upval_t* close_upvals(struct lusp_vm_upval_t* list,
 }
 
 #define ARITH(name, op) \
-	static inline struct lusp_object_t name(struct lusp_object_t* left, struct lusp_object_t* right) \
+	inline struct lusp_object_t name(struct lusp_object_t* left, struct lusp_object_t* right) \
 	{ \
 		return lusp_mkinteger(left->integer op right->integer); \
 	}
@@ -54,7 +54,7 @@ ARITH(binop_modulo, %);
 #undef ARITH
 
 #define COMP(name, op) \
-	static inline struct lusp_object_t name(struct lusp_object_t* left, struct lusp_object_t* right) \
+	inline struct lusp_object_t name(struct lusp_object_t* left, struct lusp_object_t* right) \
 	{ \
 		return lusp_mkboolean(left->integer op right->integer); \
 	}
