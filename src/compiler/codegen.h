@@ -6,7 +6,7 @@
 
 static inline void emit(struct compiler_t* compiler, struct lusp_vm_op_t op, enum lusp_vm_opcode_t opcode, unsigned int reg)
 {
-	DL_ASSERT(compiler->op_count < sizeof(compiler->ops) / sizeof(compiler->ops[0]));
+	DL_ASSERT(compiler->op_count < countof(compiler->ops));
 	
 	op.opcode = (uint8_t)opcode;
 	op.padding = 0;

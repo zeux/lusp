@@ -50,7 +50,7 @@ struct lusp_object_t lusp_mksymbol(const char* name)
 	result.type = LUSP_OBJECT_SYMBOL;
 	
 	// compute hash
-	const unsigned int hash_mask = sizeof(g_lusp_symbols) / sizeof(g_lusp_symbols[0]) - 1;
+	const unsigned int hash_mask = countof(g_lusp_symbols) - 1;
 	unsigned int hash = core_hash_string(name) & hash_mask;
 	
 	// table lookup
