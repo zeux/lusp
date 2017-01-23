@@ -8,7 +8,7 @@ struct lusp_environment_t;
 
 enum lusp_object_type_t
 {
-    LUSP_OBJECT_NULL,
+	LUSP_OBJECT_NULL,
 	LUSP_OBJECT_SYMBOL,
 	LUSP_OBJECT_BOOLEAN,
 	LUSP_OBJECT_INTEGER,
@@ -30,9 +30,8 @@ struct lusp_symbol_t
 struct lusp_object_t
 {
 	enum lusp_object_type_t type;
-	
-	union
-	{
+
+	union {
 		struct lusp_symbol_t* symbol;
 		bool boolean;
 		int integer;

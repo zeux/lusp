@@ -6,7 +6,7 @@ struct lusp_environment_slot_t
 {
 	struct lusp_symbol_t* name;
 	struct lusp_environment_slot_t* next;
-	
+
 	struct lusp_object_t value;
 };
 

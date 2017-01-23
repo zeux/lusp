@@ -16,15 +16,15 @@ void lusp_memory_term()
 
 void* lusp_memory_allocate(size_t size)
 {
-    return malloc(size);
+	return malloc(size);
 }
 
 void lusp_memory_deallocate(void* ptr)
 {
-    free(ptr);
+	free(ptr);
 }
 
 size_t lusp_memory_get_size()
 {
-    return 0;
+	return 0;
 }

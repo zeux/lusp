@@ -11,12 +11,12 @@ struct binding_t
 struct scope_t
 {
 	struct compiler_t* compiler;
-	
+
 	struct scope_t* parent;
-	
+
 	struct binding_t binds[1024];
 	unsigned int bind_count;
-	
+
 	bool has_upvals;
 };
 
@@ -28,26 +28,30 @@ struct upval_t
 
 struct compiler_t
 {
-    // global environment
-    struct lusp_environment_t* env;
-    
+	// global environment
+	struct lusp_environment_t* env;
+
 	// scope stack
 	struct scope_t* scope;
-	
+
 	// registers
 	unsigned int free_reg;
 	unsigned int reg_count;
-	
+
 	// upvalues
 	struct upval_t upvals[1024];
 	unsigned int upval_count;
-	
+
 	// opcode buffer
 	struct lusp_vm_op_t ops[1024];
 	unsigned int op_count;
-	
+
 	// compilation parameters
 	unsigned int flags;
 };
 
-#define CHECK(condition, message, ...) do { if (!(condition)) lexer->error_handler(lexer, message, ## __VA_ARGS__); } while (0)
+#define CHECK(condition, message, ...)                                         \
+	do                                                                         \
+	{                                                                          \
+		if (!(condition)) lexer->error_handler(lexer, message, ##__VA_ARGS__); \
+	} while (0)

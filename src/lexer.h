@@ -35,8 +35,7 @@ enum lusp_lexeme_t
 	LUSP_LEXEME_SYMBOL_ELSE,
 };
 
-union lusp_lexeme_value_t
-{
+union lusp_lexeme_value_t {
 	bool boolean;
 	int integer;
 	float real;
@@ -53,15 +52,15 @@ struct lusp_lexer_t
 	// current lexeme
 	enum lusp_lexeme_t lexeme;
 	union lusp_lexeme_value_t value;
-	
+
 	// lexeme information
 	const char* lexeme_data;
 	unsigned int lexeme_line;
-	
+
 	// stream information
 	const char* data;
 	unsigned int line;
-	
+
 	// error handler
 	void* error_context;
 	lusp_lexer_error_handler_t error_handler;

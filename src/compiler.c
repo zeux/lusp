@@ -1,14 +1,14 @@
 #include "compiler.h"
 
-#include "object.h"
+#include "bytecode.h"
+#include "compile.h"
 #include "environment.h"
 #include "memory.h"
-#include "compile.h"
-#include "bytecode.h"
+#include "object.h"
 
-#include "lexer.h"
-#include "internal.h"
 #include "codegen.h"
+#include "internal.h"
+#include "lexer.h"
 
 #include <string.h>
 
@@ -17,7 +17,7 @@ static inline struct binding_t* find_bind_local(struct scope_t* scope, struct lu
 	for (unsigned int i = 0; i < scope->bind_count; ++i)
 		if (scope->binds[i].symbol.symbol == symbol.symbol)
 			return &scope->binds[i];
-	
+
 	return 0;
 }
 
@@ -26,14 +26,14 @@ static inline struct binding_t* find_bind(struct compiler_t* compiler, struct lu
 	for (struct scope_t* current = compiler->scope; current; current = current->parent)
 	{
 		struct binding_t* result = find_bind_local(current, symbol);
-		
+
 		if (result)
 		{
 			*scope = current;
 			return result;
-		}		
+		}
 	}
-	
+
 	return 0;
 }
 
@@ -46,14 +46,14 @@ static inline unsigned int find_upval(struct compiler_t* compiler, struct scope_
 			assert(compiler->upvals[i].scope == scope);
 			return i;
 		}
-		
+
 	// mark scope
 	scope->has_upvals = true;
-	
+
 	// add new upval
 	compiler->upvals[compiler->upval_count].binding = binding;
 	compiler->upvals[compiler->upval_count].scope = scope;
-	
+
 	return compiler->upval_count++;
 }
 
@@ -66,10 +66,10 @@ static inline void push_scope(struct compiler_t* compiler, struct scope_t* scope
 static inline void pop_scope(struct compiler_t* compiler, unsigned int first_reg)
 {
 	struct scope_t* scope = compiler->scope;
-	
+
 	// close bindings
 	if (scope->has_upvals) emit_close(compiler, first_reg);
-	
+
 	compiler->scope = scope->parent;
 }
 
@@ -86,13 +86,13 @@ static inline struct binding_t* add_bind(struct compiler_t* compiler, struct sco
 {
 	// allocate register
 	unsigned int reg = allocate_registers(compiler, 1);
-	
+
 	// add binding
 	struct binding_t* bind = &scope->binds[scope->bind_count++];
-	
+
 	bind->symbol = symbol;
 	bind->index = reg;
-	
+
 	return bind;
 }
 
@@ -185,7 +185,7 @@ static void compile_block(struct lusp_lexer_t* lexer, struct compiler_t* compile
 static void compile_literal_next(struct lusp_lexer_t* lexer, struct compiler_t* compiler, unsigned int reg, struct lusp_object_t object)
 {
 	lusp_lexer_next(lexer);
-	
+
 	return compile_literal(compiler, reg, object);
 }
 
@@ -194,42 +194,42 @@ static void compile_call(struct lusp_lexer_t* lexer, struct compiler_t* compiler
 	// skip open paren
 	assert(lexer->lexeme == LUSP_LEXEME_OPEN_PAREN);
 	lusp_lexer_next(lexer);
-	
+
 	unsigned int free_reg = compiler->free_reg;
-	
+
 	// allocate registers for call frame
 	unsigned int frame_regs = allocate_registers(compiler, 2);
 	unsigned int arg_regs = frame_regs + 2;
 	unsigned int last_arg_reg = arg_regs - 1; // does not really mean anything for first argument
-	
+
 	while (lexer->lexeme != LUSP_LEXEME_CLOSE_PAREN)
 	{
 		// allocate register for new argument
 		unsigned int arg_reg = allocate_registers(compiler, 1);
 		assert(arg_reg == last_arg_reg + 1);
 		last_arg_reg = arg_reg;
-		
+
 		// evaluate argument
 		compile_expr(lexer, compiler, arg_reg);
-		
+
 		if (lexer->lexeme == LUSP_LEXEME_COMMA)
 			CHECK(lusp_lexer_next(lexer) != LUSP_LEXEME_CLOSE_PAREN, "expected argument after comma");
 		else
 			CHECK(lexer->lexeme == LUSP_LEXEME_CLOSE_PAREN, "comma or closing paren expected in argument list");
 	}
-	
+
 	// skip close paren
 	assert(lexer->lexeme == LUSP_LEXEME_CLOSE_PAREN);
 	lusp_lexer_next(lexer);
-	
+
 	// evaluate function
 	compile_symbol(compiler, reg, symbol);
-	
+
 	// call function
 	unsigned int arg_count = last_arg_reg + 1 - arg_regs;
-	
+
 	emit_call(compiler, reg, arg_regs, arg_count);
-	
+
 	// free temporary registers
 	compiler->free_reg = free_reg;
 }
@@ -239,10 +239,10 @@ static void compile_assign(struct lusp_lexer_t* lexer, struct compiler_t* compil
 	// skip assign sign
 	assert(lexer->lexeme == LUSP_LEXEME_ASSIGN);
 	lusp_lexer_next(lexer);
-	
+
 	// evaluate expression
 	compile_expr(lexer, compiler, reg);
-	
+
 	// assign
 	compile_symbol_getset(compiler, reg, symbol, true);
 }
@@ -252,18 +252,18 @@ static void compile_let(struct lusp_lexer_t* lexer, struct compiler_t* compiler,
 	// skip let
 	assert(lexer->lexeme == LUSP_LEXEME_SYMBOL_LET);
 	lusp_lexer_next(lexer);
-	
+
 	// read symbol
 	CHECK(lexer->lexeme == LUSP_LEXEME_SYMBOL, "variable name expected after let");
-	
+
 	struct lusp_object_t symbol = lusp_mksymbol(lexer->value.symbol);
 	lusp_lexer_next(lexer);
-	
+
 	// add variable to current scope
 	CHECK(find_bind_local(compiler->scope, symbol) == 0, "%s: variable redefinition", symbol.symbol->name);
-	
+
 	struct binding_t* bind = add_bind(compiler, compiler->scope, symbol);
-	
+
 	// is it assigned right away?
 	if (lexer->lexeme == LUSP_LEXEME_ASSIGN)
 		compile_assign(lexer, compiler, reg, symbol);
@@ -276,7 +276,7 @@ static void compile_if(struct lusp_lexer_t* lexer, struct compiler_t* compiler, 
 	// skip if
 	assert(lexer->lexeme == LUSP_LEXEME_SYMBOL_IF);
 	lusp_lexer_next(lexer);
-	
+
 	// evaluate condition
 	compile_expr(lexer, compiler, reg);
 
@@ -287,13 +287,13 @@ static void compile_if(struct lusp_lexer_t* lexer, struct compiler_t* compiler, 
 
 	// evaluate if code
 	compile_block(lexer, compiler, reg);
-	
+
 	if (lexer->lexeme == LUSP_LEXEME_SYMBOL_ELSE)
 	{
 		// skip else
 		assert(lexer->lexeme == LUSP_LEXEME_SYMBOL_ELSE);
 		lusp_lexer_next(lexer);
-	
+
 		// jump over else code
 		unsigned int jump_op = compiler->op_count;
 
@@ -316,8 +316,9 @@ static void compile_if(struct lusp_lexer_t* lexer, struct compiler_t* compiler, 
 static void compile_list(struct lusp_lexer_t* lexer, struct compiler_t* compiler, unsigned int reg, enum lusp_lexeme_t stop_lexeme)
 {
 	if (lexer->lexeme == stop_lexeme) compile_literal(compiler, reg, lusp_mknull());
-	
-	while (lexer->lexeme != stop_lexeme) compile_expr(lexer, compiler, reg);
+
+	while (lexer->lexeme != stop_lexeme)
+		compile_expr(lexer, compiler, reg);
 }
 
 static void compile_block(struct lusp_lexer_t* lexer, struct compiler_t* compiler, unsigned int reg)
@@ -327,15 +328,16 @@ static void compile_block(struct lusp_lexer_t* lexer, struct compiler_t* compile
 		// skip open brace
 		assert(lexer->lexeme == LUSP_LEXEME_OPEN_BRACE);
 		lusp_lexer_next(lexer);
-		
+
 		// compile block contents
 		compile_list(lexer, compiler, reg, LUSP_LEXEME_CLOSE_BRACE);
-		
+
 		// skip close brace
 		assert(lexer->lexeme == LUSP_LEXEME_CLOSE_BRACE);
 		lusp_lexer_next(lexer);
 	}
-	else compile_expr(lexer, compiler, reg);
+	else
+		compile_expr(lexer, compiler, reg);
 }
 
 static void compile_closure_body(struct lusp_lexer_t* lexer, struct compiler_t* compiler, bool global)
@@ -348,32 +350,32 @@ static void compile_closure_body(struct lusp_lexer_t* lexer, struct compiler_t* 
 
 	// remember last free register (should always be 0?)
 	unsigned int free_reg = compiler->free_reg;
-	
+
 	if (!global)
 	{
 		// skip vertical bar
 		assert(lexer->lexeme == LUSP_LEXEME_VERTICAL_BAR);
 		lusp_lexer_next(lexer);
-		
+
 		// parse parameter list
 		while (lexer->lexeme != LUSP_LEXEME_VERTICAL_BAR)
 		{
 			// read symbol
 			CHECK(lexer->lexeme == LUSP_LEXEME_SYMBOL, "expected symbol");
 			struct lusp_object_t symbol = lusp_mksymbol(lexer->value.symbol);
-			
+
 			lusp_lexer_next(lexer);
-			
+
 			// add binding
 			struct binding_t* bind = add_bind(compiler, &scope, symbol);
 			assert(bind->index + 1 == scope.bind_count);
-			
+
 			if (lexer->lexeme == LUSP_LEXEME_COMMA)
 				CHECK(lusp_lexer_next(lexer) == LUSP_LEXEME_SYMBOL, "expected symbol after comma");
 			else
 				CHECK(lexer->lexeme == LUSP_LEXEME_VERTICAL_BAR, "comma or vertical bar expected in parameter list");
 		}
-		
+
 		// skip vertical bar
 		assert(lexer->lexeme == LUSP_LEXEME_VERTICAL_BAR);
 		lusp_lexer_next(lexer);
@@ -394,18 +396,18 @@ static void compile_closure(struct lusp_lexer_t* lexer, struct compiler_t* compi
 {
 	// create new compiler
 	struct compiler_t child;
-	
+
 	create_compiler(&child, compiler);
-	
+
 	// compile closure
 	compile_closure_body(lexer, &child, false);
-	
+
 	// create bytecode
 	struct lusp_vm_bytecode_t* bytecode = create_closure(&child);
-	
+
 	// creeate closure
 	emit_create_closure(compiler, reg, bytecode);
-	
+
 	// set upvalues
 	for (unsigned int i = 0; i < child.upval_count; ++i)
 	{
@@ -420,10 +422,10 @@ static void compile_parens(struct lusp_lexer_t* lexer, struct compiler_t* compil
 	// skip open paren
 	assert(lexer->lexeme == LUSP_LEXEME_OPEN_PAREN);
 	lusp_lexer_next(lexer);
-	
+
 	// evaluate expression
 	compile_expr(lexer, compiler, reg);
-	
+
 	// skip close paren
 	CHECK(lexer->lexeme == LUSP_LEXEME_CLOSE_PAREN, "expected close paren");
 	lusp_lexer_next(lexer);
@@ -435,39 +437,40 @@ static void compile_term(struct lusp_lexer_t* lexer, struct compiler_t* compiler
 	{
 	case LUSP_LEXEME_LITERAL_BOOLEAN:
 		return compile_literal_next(lexer, compiler, reg, lusp_mkboolean(lexer->value.boolean));
-		
+
 	case LUSP_LEXEME_LITERAL_INTEGER:
 		return compile_literal_next(lexer, compiler, reg, lusp_mkinteger(lexer->value.integer));
-		
+
 	case LUSP_LEXEME_LITERAL_REAL:
 		return compile_literal_next(lexer, compiler, reg, lusp_mkreal(lexer->value.real));
-		
+
 	case LUSP_LEXEME_LITERAL_STRING:
 		return compile_literal_next(lexer, compiler, reg, lusp_mkstring(lexer->value.string));
-		
+
 	case LUSP_LEXEME_VERTICAL_BAR:
 		return compile_closure(lexer, compiler, reg);
-	
+
 	case LUSP_LEXEME_OPEN_PAREN:
 		return compile_parens(lexer, compiler, reg);
-		
+
 	case LUSP_LEXEME_SYMBOL:
 	{
 		struct lusp_object_t symbol = lusp_mksymbol(lexer->value.symbol);
-		
+
 		switch (lusp_lexer_next(lexer))
 		{
 		case LUSP_LEXEME_OPEN_PAREN:
 			return compile_call(lexer, compiler, reg, symbol);
-			
+
 		case LUSP_LEXEME_ASSIGN:
 			return compile_assign(lexer, compiler, reg, symbol);
-			
+
 		default:
 			return compile_symbol(compiler, reg, symbol);
 		}
-	} break;
-	
+	}
+	break;
+
 	default:
 		CHECK(false, "expected term");
 	}
@@ -477,35 +480,35 @@ static void compile_addexpr(struct lusp_lexer_t* lexer, struct compiler_t* compi
 {
 	// evaluate left expression
 	compile_term(lexer, compiler, reg);
-	
+
 	while (lexer->lexeme == LUSP_LEXEME_ADD || lexer->lexeme == LUSP_LEXEME_SUBTRACT)
 	{
 		// consume lexeme
 		enum lusp_lexeme_t lexeme = lexer->lexeme;
 		lusp_lexer_next(lexer);
-		
+
 		// allocate register
 		unsigned int free_reg = compiler->free_reg;
 		unsigned int temp_reg = allocate_registers(compiler, 1);
-		
+
 		// evaluate right expression
 		compile_term(lexer, compiler, temp_reg);
-		
+
 		// evaluate relop
 		switch (lexeme)
 		{
 		case LUSP_LEXEME_ADD:
 			emit_binop(compiler, LUSP_VMOP_ADD, reg, reg, temp_reg);
 			break;
-			
+
 		case LUSP_LEXEME_SUBTRACT:
 			emit_binop(compiler, LUSP_VMOP_SUBTRACT, reg, reg, temp_reg);
 			break;
-			
+
 		default:
 			assert(false);
 		}
-		
+
 		// free register
 		compiler->free_reg = free_reg;
 	}
@@ -515,40 +518,40 @@ static void compile_mulexpr(struct lusp_lexer_t* lexer, struct compiler_t* compi
 {
 	// evaluate left expression
 	compile_addexpr(lexer, compiler, reg);
-	
+
 	while (lexer->lexeme == LUSP_LEXEME_MULTIPLY || lexer->lexeme == LUSP_LEXEME_DIVIDE ||
-		lexer->lexeme == LUSP_LEXEME_MODULO)
+	       lexer->lexeme == LUSP_LEXEME_MODULO)
 	{
 		// consume lexeme
 		enum lusp_lexeme_t lexeme = lexer->lexeme;
 		lusp_lexer_next(lexer);
-		
+
 		// allocate register
 		unsigned int free_reg = compiler->free_reg;
 		unsigned int temp_reg = allocate_registers(compiler, 1);
-		
+
 		// evaluate right expression
 		compile_addexpr(lexer, compiler, temp_reg);
-		
+
 		// evaluate relop
 		switch (lexeme)
 		{
 		case LUSP_LEXEME_MULTIPLY:
 			emit_binop(compiler, LUSP_VMOP_MULTIPLY, reg, reg, temp_reg);
 			break;
-			
+
 		case LUSP_LEXEME_DIVIDE:
 			emit_binop(compiler, LUSP_VMOP_DIVIDE, reg, reg, temp_reg);
 			break;
-			
+
 		case LUSP_LEXEME_MODULO:
 			emit_binop(compiler, LUSP_VMOP_MODULO, reg, reg, temp_reg);
 			break;
-			
+
 		default:
 			assert(false);
 		}
-		
+
 		// free register
 		compiler->free_reg = free_reg;
 	}
@@ -558,44 +561,44 @@ static void compile_relexpr(struct lusp_lexer_t* lexer, struct compiler_t* compi
 {
 	// evaluate left expression
 	compile_mulexpr(lexer, compiler, reg);
-	
+
 	while (lexer->lexeme == LUSP_LEXEME_LESS || lexer->lexeme == LUSP_LEXEME_LESS_EQUAL ||
-		lexer->lexeme == LUSP_LEXEME_GREATER || lexer->lexeme == LUSP_LEXEME_GREATER_EQUAL)
+	       lexer->lexeme == LUSP_LEXEME_GREATER || lexer->lexeme == LUSP_LEXEME_GREATER_EQUAL)
 	{
 		// consume lexeme
 		enum lusp_lexeme_t lexeme = lexer->lexeme;
 		lusp_lexer_next(lexer);
-		
+
 		// allocate register
 		unsigned int free_reg = compiler->free_reg;
 		unsigned int temp_reg = allocate_registers(compiler, 1);
-		
+
 		// evaluate right expression
 		compile_mulexpr(lexer, compiler, temp_reg);
-		
+
 		// evaluate relop
 		switch (lexeme)
 		{
 		case LUSP_LEXEME_LESS:
 			emit_binop(compiler, LUSP_VMOP_LESS, reg, reg, temp_reg);
 			break;
-			
+
 		case LUSP_LEXEME_LESS_EQUAL:
 			emit_binop(compiler, LUSP_VMOP_LESS_EQUAL, reg, reg, temp_reg);
 			break;
-			
+
 		case LUSP_LEXEME_GREATER:
 			emit_binop(compiler, LUSP_VMOP_GREATER, reg, reg, temp_reg);
 			break;
-			
+
 		case LUSP_LEXEME_GREATER_EQUAL:
 			emit_binop(compiler, LUSP_VMOP_GREATER_EQUAL, reg, reg, temp_reg);
 			break;
-			
+
 		default:
 			assert(false);
 		}
-		
+
 		// free register
 		compiler->free_reg = free_reg;
 	}
@@ -605,35 +608,35 @@ static void compile_eqexpr(struct lusp_lexer_t* lexer, struct compiler_t* compil
 {
 	// evaluate left expression
 	compile_relexpr(lexer, compiler, reg);
-	
+
 	while (lexer->lexeme == LUSP_LEXEME_EQUAL || lexer->lexeme == LUSP_LEXEME_NOT_EQUAL)
 	{
 		// consume lexeme
 		enum lusp_lexeme_t lexeme = lexer->lexeme;
 		lusp_lexer_next(lexer);
-		
+
 		// allocate register
 		unsigned int free_reg = compiler->free_reg;
 		unsigned int temp_reg = allocate_registers(compiler, 1);
-		
+
 		// evaluate right expression
 		compile_relexpr(lexer, compiler, temp_reg);
-		
+
 		// evaluate relop
 		switch (lexeme)
 		{
 		case LUSP_LEXEME_EQUAL:
 			emit_binop(compiler, LUSP_VMOP_EQUAL, reg, reg, temp_reg);
 			break;
-			
+
 		case LUSP_LEXEME_NOT_EQUAL:
 			emit_binop(compiler, LUSP_VMOP_NOT_EQUAL, reg, reg, temp_reg);
 			break;
-			
+
 		default:
 			assert(false);
 		}
-		
+
 		// free register
 		compiler->free_reg = free_reg;
 	}
@@ -645,10 +648,10 @@ static void compile_expr(struct lusp_lexer_t* lexer, struct compiler_t* compiler
 	{
 	case LUSP_LEXEME_SYMBOL_LET:
 		return compile_let(lexer, compiler, reg);
-		
+
 	case LUSP_LEXEME_SYMBOL_IF:
 		return compile_if(lexer, compiler, reg);
-	
+
 	default:
 		return compile_eqexpr(lexer, compiler, reg);
 	}
@@ -657,28 +660,28 @@ static void compile_expr(struct lusp_lexer_t* lexer, struct compiler_t* compiler
 struct lusp_object_t lusp_compile_ex(struct lusp_environment_t* env, struct lusp_lexer_t* lexer, struct mem_arena_t* arena, unsigned int flags)
 {
 	(void)arena;
-	
-	// create fake parent compiler 
+
+	// create fake parent compiler
 	struct compiler_t parent;
-	
-    parent.env = env;
-    parent.scope = 0;
-    parent.flags = flags;
-    
-    // create actual compiler
-    struct compiler_t compiler;
-    
-    create_compiler(&compiler, &parent);
-    
-    // compile closure body
-    compile_closure_body(lexer, &compiler, true);
-    
-    // create bytecode
+
+	parent.env = env;
+	parent.scope = 0;
+	parent.flags = flags;
+
+	// create actual compiler
+	struct compiler_t compiler;
+
+	create_compiler(&compiler, &parent);
+
+	// compile closure body
+	compile_closure_body(lexer, &compiler, true);
+
+	// create bytecode
 	struct lusp_vm_bytecode_t* bytecode = create_closure(&compiler);
-	
+
 	// check correctness
 	assert(compiler.upval_count == 0);
-	
+
 	// create resulting closure
 	return lusp_mkclosure(bytecode, 0);
 }

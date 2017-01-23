@@ -23,7 +23,7 @@ enum lusp_vm_opcode_t
 	LUSP_VMOP_JUMP_IFNOT,
 	LUSP_VMOP_CREATE_CLOSURE,
 	LUSP_VMOP_CLOSE,
-	
+
 	LUSP_VMOP_ADD,
 	LUSP_VMOP_SUBTRACT,
 	LUSP_VMOP_MULTIPLY,
@@ -42,72 +42,70 @@ struct lusp_vm_op_t
 	uint8_t opcode;
 	uint8_t padding;
 	uint16_t reg;
-	
-	union
-	{
+
+	union {
 		struct
 		{
 			struct lusp_object_t* object;
 		} load_const;
-		
+
 		struct
 		{
 			struct lusp_environment_slot_t* slot;
 		} loadstore_global;
-		
+
 		struct
 		{
 			unsigned int index;
 		} loadstore_upval;
-		
+
 		struct
 		{
 			unsigned int index;
 		} move;
-		
+
 		struct
 		{
 			uint16_t args;
 			uint16_t count;
 		} call;
-		
+
 		struct
 		{
-		    int offset;
+			int offset;
 		} jump;
-		
+
 		struct
 		{
-		    struct lusp_vm_bytecode_t* code;
+			struct lusp_vm_bytecode_t* code;
 		} create_closure;
-		
-		struct 
+
+		struct
 		{
 			unsigned int begin;
 		} close;
-		
-		struct 
+
+		struct
 		{
 			uint16_t left;
 			uint16_t right;
 		} binop;
-		
+
 		uint32_t dummy;
 	};
 };
 
 struct lusp_vm_upval_t
 {
-    struct lusp_object_t* ref;
-    
-    union
-    {
-        // for closed upval
-        struct lusp_object_t object;
-        
-        // for open upval
-        struct lusp_vm_upval_t* next;
-    };
+	struct lusp_object_t* ref;
+
+	union {
+		// for closed upval
+		struct lusp_object_t object;
+
+		// for open upval
+		struct lusp_vm_upval_t* next;
+	};
 };
 
 struct lusp_vm_bytecode_t;
@@ -129,10 +127,10 @@ typedef struct lusp_object_t (*lusp_vm_evaluator_t)(struct lusp_vm_bytecode_t* c
 
 struct lusp_vm_bytecode_t
 {
-    struct lusp_environment_t* env;
-    
-    unsigned int reg_count;
-    unsigned int upval_count;
+	struct lusp_environment_t* env;
+
+	unsigned int reg_count;
+	unsigned int upval_count;
 
 	struct lusp_vm_op_t* ops;
 	unsigned int op_count;
