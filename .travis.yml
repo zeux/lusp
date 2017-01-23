@@ -1,0 +1,7 @@
+sudo: required
+dist: trusty
+language: cpp
+script: make config=coverage test -k -j2
+
+after_success:
+- bash <(curl -s https://codecov.io/bash)
