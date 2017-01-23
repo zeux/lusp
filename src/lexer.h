@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdbool.h>
+
 enum lusp_lexeme_t
 {
 	LUSP_LEXEME_UNKNOWN,

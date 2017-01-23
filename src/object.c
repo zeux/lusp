@@ -3,16 +3,39 @@
 #include "bytecode.h"
 #include "memory.h"
 
+#include <assert.h>
+#include <string.h>
+
 static struct lusp_symbol_t* g_lusp_symbols[1024];
 
 static inline const char* mkstring(const char* value)
 {
-	size_t length = str_length(value);
+	size_t length = strlen(value);
 	
 	char* result = (char*)lusp_memory_allocate(length + 1);
 	assert(result);
 	
-	str_copy(result, length + 1, value);
+	strcpy(result, value);
+	
+	return result;
+}
+
+static uint32_t hash_string(const char* string)
+{
+	// Jenkins one-at-a-time hash
+	// reference: http://en.wikipedia.org/wiki/Jenkins_hash_function#one-at-a-time 
+	uint32_t result = 0;
+	
+	while (*string)
+	{
+		result += *string;
+		result += result << 10;
+		result ^= result >> 6;
+	}
+	
+	result += result << 3;
+	result ^= result >> 11;
+	result += result << 15;
 	
 	return result;
 }
@@ -42,12 +65,12 @@ struct lusp_object_t lusp_mksymbol(const char* name)
 	result.type = LUSP_OBJECT_SYMBOL;
 	
 	// compute hash
-	const unsigned int hash_mask = countof(g_lusp_symbols) - 1;
-	unsigned int hash = core_hash_string(name) & hash_mask;
+	const unsigned int hash_mask = sizeof(g_lusp_symbols) / sizeof(g_lusp_symbols[0]) - 1;
+	unsigned int hash = hash_string(name) & hash_mask;
 	
 	// table lookup
 	for (struct lusp_symbol_t* symbol = g_lusp_symbols[hash]; symbol; symbol = symbol->next)
-		if (str_is_equal(name, symbol->name))
+		if (strcmp(name, symbol->name) == 0)
 		{
 			result.symbol = symbol;
 			return result;

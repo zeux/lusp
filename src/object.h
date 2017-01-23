@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdbool.h>
+
 struct lusp_vm_bytecode_t;
 struct lusp_vm_closure_t;
 struct lusp_environment_t;

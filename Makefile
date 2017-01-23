@@ -5,7 +5,7 @@ config=debug
 
 BUILD=build/$(config)
 
-CFLAGS=-g -std=c99
+CFLAGS=-g -std=c99 -Wall -Wextra -Werror
 LDFLAGS=
 
 ifeq ($(config),release)

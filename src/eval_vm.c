@@ -8,6 +8,8 @@ static struct lusp_vm_upval_t g_dummy_upval = {0, {{LUSP_OBJECT_NULL, {0}}}};
 
 struct lusp_object_t lusp_eval_vm(struct lusp_vm_bytecode_t* code, struct lusp_vm_closure_t* closure, struct lusp_object_t* regs, unsigned int arg_count)
 {
+	(void)arg_count;
+
     struct lusp_vm_op_t* pc = code->ops;
     struct lusp_vm_upval_t* upvals = &g_dummy_upval;
 

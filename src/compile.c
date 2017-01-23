@@ -24,22 +24,13 @@ void error_handler(struct lusp_lexer_t* lexer, const char* message, ...)
 
 struct lusp_object_t lusp_compile(struct lusp_environment_t* env, struct mem_arena_t* arena, const char* string, unsigned int flags)
 {
-    unsigned int marker = mem_arena_get_marker(arena);
-    
     jmp_buf buf;
-    struct lusp_lexer_t lexer;
-
     if (setjmp(buf))
-    {
-        mem_arena_restore(arena, marker);
         return lusp_mknull();
-    }
 
+    struct lusp_lexer_t lexer;
     lusp_lexer_init(&lexer, string, &buf, error_handler);
 
     struct lusp_object_t bytecode = lusp_compile_ex(env, &lexer, arena, flags);
-    
-    mem_arena_restore(arena, marker);
-    
     return bytecode;
 }

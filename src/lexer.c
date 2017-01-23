@@ -1,6 +1,8 @@
 #include "lexer.h"
 
+#include <assert.h>
 #include <math.h>
+#include <string.h>
 
 static const bool g_delimiter_table[256] =
 {
@@ -141,15 +143,15 @@ static inline enum lusp_lexeme_t get_symbol_lexeme(const char* value)
 	switch (*value)
 	{
 	case 'e':
-		if (str_is_equal(value, "else")) return LUSP_LEXEME_SYMBOL_ELSE;
+		if (strcmp(value, "else") == 0) return LUSP_LEXEME_SYMBOL_ELSE;
 		return LUSP_LEXEME_SYMBOL;
 		
 	case 'i':
-		if (str_is_equal(value, "if")) return LUSP_LEXEME_SYMBOL_IF;
+		if (strcmp(value, "if") == 0) return LUSP_LEXEME_SYMBOL_IF;
 		return LUSP_LEXEME_SYMBOL;
 		
 	case 'l':
-		if (str_is_equal(value, "let")) return LUSP_LEXEME_SYMBOL_LET;
+		if (strcmp(value, "let") == 0) return LUSP_LEXEME_SYMBOL_LET;
 		return LUSP_LEXEME_SYMBOL;
 		
 	default:

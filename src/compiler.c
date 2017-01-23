@@ -10,6 +10,8 @@
 #include "internal.h"
 #include "codegen.h"
 
+#include <string.h>
+
 static inline struct binding_t* find_bind_local(struct scope_t* scope, struct lusp_object_t symbol)
 {
 	for (unsigned int i = 0; i < scope->bind_count; ++i)
@@ -75,7 +77,8 @@ static inline unsigned int allocate_registers(struct compiler_t* compiler, unsig
 {
 	unsigned int result = compiler->free_reg;
 	compiler->free_reg += count;
-	compiler->reg_count = max(compiler->reg_count, compiler->free_reg);
+	if (compiler->reg_count < compiler->free_reg)
+		compiler->reg_count = compiler->free_reg;
 	return result;
 }
 

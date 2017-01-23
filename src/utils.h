@@ -4,6 +4,8 @@
 #include "memory.h"
 #include "bytecode.h"
 
+#include <assert.h>
+
 static inline struct lusp_vm_upval_t* mkupval(struct lusp_vm_upval_t** list, struct lusp_object_t* ref)
 {
     // look for ref in list

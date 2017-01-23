@@ -3,6 +3,8 @@
 #include "object.h"
 #include "memory.h"
 
+#include <assert.h>
+
 static struct lusp_environment_slot_t* mkslot(struct lusp_environment_slot_t* next, struct lusp_object_t name)
 {
 	assert(name.type == LUSP_OBJECT_SYMBOL);

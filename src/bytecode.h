@@ -2,6 +2,8 @@
 
 #include "object.h"
 
+#include <stdint.h>
+
 struct lusp_environment_t;
 struct lusp_environment_slot_t;
 struct lusp_vm_bytecode_t;

@@ -5,6 +5,7 @@
 #include "object.h"
 
 #include <stdio.h>
+#include <string.h>
 
 static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, bool deep)
 {
@@ -71,9 +72,9 @@ static void dump_bytecode(struct lusp_vm_bytecode_t* code, const char* indent, b
 			{
     		    char new_indent[256];
     		    
-    		    str_copy(new_indent, sizeof(new_indent), indent);
-    		    str_concat(new_indent, sizeof(new_indent), "\t");
-    		    
+    		    strncpy(new_indent, indent, sizeof(new_indent));
+    		    strncat(new_indent, "\t", sizeof(new_indent));
+
     		    dump_bytecode(op->create_closure.code, new_indent, deep);
 		    }
     		break;
