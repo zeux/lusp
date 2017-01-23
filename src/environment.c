@@ -1,5 +1,3 @@
-// DeepLight Engine (c) Zeux 2006-2010
-
 #include <core/common.h>
 
 #include <lusp/environment.h>

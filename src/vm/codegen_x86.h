@@ -1,5 +1,3 @@
-// DeepLight Engine (c) Zeux 2006-2010
-
 #pragma once
 
 #define CODE() code

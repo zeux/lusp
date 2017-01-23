@@ -1,5 +1,3 @@
-// DeepLight Engine (c) Zeux 2006-2010
-
 #if DL_WINDOWS
 
 #include <core/common.h>
