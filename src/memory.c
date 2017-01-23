@@ -1,9 +1,4 @@
-#include <core/common.h>
-
-#include <lusp/memory.h>
-
-#include <mem/arena.h>
-#include <mem/heap.h>
+#include "memory.h"
 
 static struct mem_heap_t g_lusp_heap;
 

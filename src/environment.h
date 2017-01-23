@@ -1,6 +1,6 @@
 #pragma once
 
-#include <lusp/object.h>
+#include "object.h"
 
 struct lusp_environment_slot_t
 {

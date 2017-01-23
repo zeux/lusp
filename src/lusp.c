@@ -1,10 +1,8 @@
-#include <core/common.h>
+#include "lusp.h"
 
-#include <lusp/lusp.h>
-
-#include <lusp/object.h>
-#include <lusp/memory.h>
-#include <lusp/eval.h>
+#include "object.h"
+#include "memory.h"
+#include "eval.h"
 
 bool lusp_init(struct mem_arena_t* arena, unsigned int heap_size)
 {

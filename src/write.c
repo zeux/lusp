@@ -1,10 +1,6 @@
-#include <core/common.h>
+#include "write.h"
 
-#include <lusp/write.h>
-
-#include <lusp/object.h>
-
-#include <core/string.h>
+#include "object.h"
 
 #include <stdio.h>
 

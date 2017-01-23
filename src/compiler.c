@@ -1,18 +1,14 @@
-#include <core/common.h>
+#include "compiler.h"
 
-#include <lusp/compiler/compiler.h>
+#include "object.h"
+#include "environment.h"
+#include "memory.h"
+#include "compile.h"
+#include "bytecode.h"
 
-#include <lusp/object.h>
-#include <lusp/environment.h>
-#include <lusp/memory.h>
-#include <lusp/compile.h>
-#include <lusp/vm/bytecode.h>
-
-#include <lusp/compiler/lexer.h>
-#include <lusp/compiler/internal.h>
-#include <lusp/compiler/codegen.h>
-
-#include <core/memory.h>
+#include "lexer.h"
+#include "internal.h"
+#include "codegen.h"
 
 static inline struct binding_t* find_bind_local(struct scope_t* scope, struct lusp_object_t symbol)
 {
@@ -45,7 +41,7 @@ static inline unsigned int find_upval(struct compiler_t* compiler, struct scope_
 	for (unsigned int i = 0; i < compiler->upval_count; ++i)
 		if (compiler->upvals[i].binding == binding)
 		{
-			DL_ASSERT(compiler->upvals[i].scope == scope);
+			assert(compiler->upvals[i].scope == scope);
 			return i;
 		}
 		
@@ -115,12 +111,12 @@ static struct lusp_vm_bytecode_t* create_closure(struct compiler_t* compiler)
 	unsigned int ops_size = compiler->op_count * sizeof(struct lusp_vm_op_t);
 
 	struct lusp_vm_op_t* ops = (struct lusp_vm_op_t*)lusp_memory_allocate(ops_size);
-	DL_ASSERT(ops);
+	assert(ops);
 
 	memcpy(ops, compiler->ops, ops_size);
 
 	struct lusp_vm_bytecode_t* code = (struct lusp_vm_bytecode_t*)lusp_memory_allocate(sizeof(struct lusp_vm_bytecode_t));
-	DL_ASSERT(code);
+	assert(code);
 
 	code->env = compiler->env;
 	code->reg_count = compiler->reg_count;
@@ -158,7 +154,7 @@ static void compile_bind_getset(struct compiler_t* compiler, unsigned int reg, s
 
 static void compile_symbol_getset(struct compiler_t* compiler, unsigned int reg, struct lusp_object_t symbol, bool set)
 {
-	DL_ASSERT(symbol.type == LUSP_OBJECT_SYMBOL);
+	assert(symbol.type == LUSP_OBJECT_SYMBOL);
 
 	struct scope_t* scope = 0;
 	struct binding_t* bind = find_bind(compiler, symbol, &scope);
@@ -193,7 +189,7 @@ static void compile_literal_next(struct lusp_lexer_t* lexer, struct compiler_t* 
 static void compile_call(struct lusp_lexer_t* lexer, struct compiler_t* compiler, unsigned int reg, struct lusp_object_t symbol)
 {
 	// skip open paren
-	DL_ASSERT(lexer->lexeme == LUSP_LEXEME_OPEN_PAREN);
+	assert(lexer->lexeme == LUSP_LEXEME_OPEN_PAREN);
 	lusp_lexer_next(lexer);
 	
 	unsigned int free_reg = compiler->free_reg;
@@ -207,7 +203,7 @@ static void compile_call(struct lusp_lexer_t* lexer, struct compiler_t* compiler
 	{
 		// allocate register for new argument
 		unsigned int arg_reg = allocate_registers(compiler, 1);
-		DL_ASSERT(arg_reg == last_arg_reg + 1);
+		assert(arg_reg == last_arg_reg + 1);
 		last_arg_reg = arg_reg;
 		
 		// evaluate argument
@@ -220,7 +216,7 @@ static void compile_call(struct lusp_lexer_t* lexer, struct compiler_t* compiler
 	}
 	
 	// skip close paren
-	DL_ASSERT(lexer->lexeme == LUSP_LEXEME_CLOSE_PAREN);
+	assert(lexer->lexeme == LUSP_LEXEME_CLOSE_PAREN);
 	lusp_lexer_next(lexer);
 	
 	// evaluate function
@@ -238,7 +234,7 @@ static void compile_call(struct lusp_lexer_t* lexer, struct compiler_t* compiler
 static void compile_assign(struct lusp_lexer_t* lexer, struct compiler_t* compiler, unsigned int reg, struct lusp_object_t symbol)
 {
 	// skip assign sign
-	DL_ASSERT(lexer->lexeme == LUSP_LEXEME_ASSIGN);
+	assert(lexer->lexeme == LUSP_LEXEME_ASSIGN);
 	lusp_lexer_next(lexer);
 	
 	// evaluate expression
@@ -251,7 +247,7 @@ static void compile_assign(struct lusp_lexer_t* lexer, struct compiler_t* compil
 static void compile_let(struct lusp_lexer_t* lexer, struct compiler_t* compiler, unsigned int reg)
 {
 	// skip let
-	DL_ASSERT(lexer->lexeme == LUSP_LEXEME_SYMBOL_LET);
+	assert(lexer->lexeme == LUSP_LEXEME_SYMBOL_LET);
 	lusp_lexer_next(lexer);
 	
 	// read symbol
@@ -275,7 +271,7 @@ static void compile_let(struct lusp_lexer_t* lexer, struct compiler_t* compiler,
 static void compile_if(struct lusp_lexer_t* lexer, struct compiler_t* compiler, unsigned int reg)
 {
 	// skip if
-	DL_ASSERT(lexer->lexeme == LUSP_LEXEME_SYMBOL_IF);
+	assert(lexer->lexeme == LUSP_LEXEME_SYMBOL_IF);
 	lusp_lexer_next(lexer);
 	
 	// evaluate condition
@@ -292,7 +288,7 @@ static void compile_if(struct lusp_lexer_t* lexer, struct compiler_t* compiler, 
 	if (lexer->lexeme == LUSP_LEXEME_SYMBOL_ELSE)
 	{
 		// skip else
-		DL_ASSERT(lexer->lexeme == LUSP_LEXEME_SYMBOL_ELSE);
+		assert(lexer->lexeme == LUSP_LEXEME_SYMBOL_ELSE);
 		lusp_lexer_next(lexer);
 	
 		// jump over else code
@@ -326,14 +322,14 @@ static void compile_block(struct lusp_lexer_t* lexer, struct compiler_t* compile
 	if (lexer->lexeme == LUSP_LEXEME_OPEN_BRACE)
 	{
 		// skip open brace
-		DL_ASSERT(lexer->lexeme == LUSP_LEXEME_OPEN_BRACE);
+		assert(lexer->lexeme == LUSP_LEXEME_OPEN_BRACE);
 		lusp_lexer_next(lexer);
 		
 		// compile block contents
 		compile_list(lexer, compiler, reg, LUSP_LEXEME_CLOSE_BRACE);
 		
 		// skip close brace
-		DL_ASSERT(lexer->lexeme == LUSP_LEXEME_CLOSE_BRACE);
+		assert(lexer->lexeme == LUSP_LEXEME_CLOSE_BRACE);
 		lusp_lexer_next(lexer);
 	}
 	else compile_expr(lexer, compiler, reg);
@@ -353,7 +349,7 @@ static void compile_closure_body(struct lusp_lexer_t* lexer, struct compiler_t* 
 	if (!global)
 	{
 		// skip vertical bar
-		DL_ASSERT(lexer->lexeme == LUSP_LEXEME_VERTICAL_BAR);
+		assert(lexer->lexeme == LUSP_LEXEME_VERTICAL_BAR);
 		lusp_lexer_next(lexer);
 		
 		// parse parameter list
@@ -367,7 +363,7 @@ static void compile_closure_body(struct lusp_lexer_t* lexer, struct compiler_t* 
 			
 			// add binding
 			struct binding_t* bind = add_bind(compiler, &scope, symbol);
-			DL_ASSERT(bind->index + 1 == scope.bind_count);
+			assert(bind->index + 1 == scope.bind_count);
 			
 			if (lexer->lexeme == LUSP_LEXEME_COMMA)
 				CHECK(lusp_lexer_next(lexer) == LUSP_LEXEME_SYMBOL, "expected symbol after comma");
@@ -376,7 +372,7 @@ static void compile_closure_body(struct lusp_lexer_t* lexer, struct compiler_t* 
 		}
 		
 		// skip vertical bar
-		DL_ASSERT(lexer->lexeme == LUSP_LEXEME_VERTICAL_BAR);
+		assert(lexer->lexeme == LUSP_LEXEME_VERTICAL_BAR);
 		lusp_lexer_next(lexer);
 	}
 
@@ -419,7 +415,7 @@ static void compile_closure(struct lusp_lexer_t* lexer, struct compiler_t* compi
 static void compile_parens(struct lusp_lexer_t* lexer, struct compiler_t* compiler, unsigned int reg)
 {
 	// skip open paren
-	DL_ASSERT(lexer->lexeme == LUSP_LEXEME_OPEN_PAREN);
+	assert(lexer->lexeme == LUSP_LEXEME_OPEN_PAREN);
 	lusp_lexer_next(lexer);
 	
 	// evaluate expression
@@ -504,7 +500,7 @@ static void compile_addexpr(struct lusp_lexer_t* lexer, struct compiler_t* compi
 			break;
 			
 		default:
-			DL_ASSERT(false);
+			assert(false);
 		}
 		
 		// free register
@@ -547,7 +543,7 @@ static void compile_mulexpr(struct lusp_lexer_t* lexer, struct compiler_t* compi
 			break;
 			
 		default:
-			DL_ASSERT(false);
+			assert(false);
 		}
 		
 		// free register
@@ -594,7 +590,7 @@ static void compile_relexpr(struct lusp_lexer_t* lexer, struct compiler_t* compi
 			break;
 			
 		default:
-			DL_ASSERT(false);
+			assert(false);
 		}
 		
 		// free register
@@ -632,7 +628,7 @@ static void compile_eqexpr(struct lusp_lexer_t* lexer, struct compiler_t* compil
 			break;
 			
 		default:
-			DL_ASSERT(false);
+			assert(false);
 		}
 		
 		// free register
@@ -678,7 +674,7 @@ struct lusp_object_t lusp_compile_ex(struct lusp_environment_t* env, struct lusp
 	struct lusp_vm_bytecode_t* bytecode = create_closure(&compiler);
 	
 	// check correctness
-	DL_ASSERT(compiler.upval_count == 0);
+	assert(compiler.upval_count == 0);
 	
 	// create resulting closure
 	return lusp_mkclosure(bytecode, 0);

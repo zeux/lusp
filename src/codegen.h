@@ -1,10 +1,10 @@
 #pragma once
 
-#include <lusp/compiler/internal.h>
+#include "internal.h"
 
 static inline void emit(struct compiler_t* compiler, struct lusp_vm_op_t op, enum lusp_vm_opcode_t opcode, unsigned int reg)
 {
-	DL_ASSERT(compiler->op_count < countof(compiler->ops));
+	assert(compiler->op_count < countof(compiler->ops));
 	
 	op.opcode = (uint8_t)opcode;
 	op.padding = 0;
@@ -92,7 +92,7 @@ static inline void emit_close(struct compiler_t* compiler, unsigned int begin)
 
 static inline void emit_binop(struct compiler_t* compiler, enum lusp_vm_opcode_t opcode, unsigned int reg, unsigned int left, unsigned int right)
 {
-	DL_ASSERT(opcode == LUSP_VMOP_ADD || opcode == LUSP_VMOP_SUBTRACT || opcode == LUSP_VMOP_MULTIPLY ||
+	assert(opcode == LUSP_VMOP_ADD || opcode == LUSP_VMOP_SUBTRACT || opcode == LUSP_VMOP_MULTIPLY ||
 		opcode == LUSP_VMOP_DIVIDE || opcode == LUSP_VMOP_MODULO || opcode == LUSP_VMOP_EQUAL ||
 		opcode == LUSP_VMOP_NOT_EQUAL || opcode == LUSP_VMOP_LESS || opcode == LUSP_VMOP_LESS_EQUAL ||
 		opcode == LUSP_VMOP_GREATER || opcode == LUSP_VMOP_GREATER_EQUAL);
@@ -107,6 +107,6 @@ static inline void fixup_jump(struct compiler_t* compiler, unsigned int jump, un
 {
     struct lusp_vm_op_t* op = &compiler->ops[jump];
     
-    DL_ASSERT(op->opcode == LUSP_VMOP_JUMP || op->opcode == LUSP_VMOP_JUMP_IF || op->opcode == LUSP_VMOP_JUMP_IFNOT);
+    assert(op->opcode == LUSP_VMOP_JUMP || op->opcode == LUSP_VMOP_JUMP_IF || op->opcode == LUSP_VMOP_JUMP_IFNOT);
 	op->jump.offset = (int)dest - (int)jump - 1;
 }

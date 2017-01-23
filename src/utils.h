@@ -1,8 +1,8 @@
 #pragma once
 
-#include <lusp/object.h>
-#include <lusp/memory.h>
-#include <lusp/vm/bytecode.h>
+#include "object.h"
+#include "memory.h"
+#include "bytecode.h"
 
 static inline struct lusp_vm_upval_t* mkupval(struct lusp_vm_upval_t** list, struct lusp_object_t* ref)
 {
@@ -13,7 +13,7 @@ static inline struct lusp_vm_upval_t* mkupval(struct lusp_vm_upval_t** list, str
             
     // create new upval
     struct lusp_vm_upval_t* result = (struct lusp_vm_upval_t*)lusp_memory_allocate(sizeof(struct lusp_vm_upval_t));
-    DL_ASSERT(result);
+    assert(result);
     
     result->ref = ref;
     result->next = *list;

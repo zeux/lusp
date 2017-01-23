@@ -1,6 +1,6 @@
 #pragma once
 
-#include <lusp/object.h>
+#include "object.h"
 
 void lusp_jit_set(bool enabled);
 bool lusp_jit_get();

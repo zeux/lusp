@@ -1,10 +1,8 @@
-#include <core/common.h>
+#include "environment.h"
+#include "object.h"
 
-#include <lusp/environment.h>
-#include <lusp/object.h>
-
-#include <lusp/vm/bytecode.h>
-#include <lusp/vm/utils.h>
+#include "bytecode.h"
+#include "utils.h"
 
 static struct lusp_vm_upval_t g_dummy_upval = {0, {{LUSP_OBJECT_NULL, {0}}}};
 
@@ -49,7 +47,7 @@ struct lusp_object_t lusp_eval_vm(struct lusp_vm_bytecode_t* code, struct lusp_v
 			struct lusp_object_t* args = regs + op.call.args;
 			unsigned int count = op.call.count;
 			
-            DL_ASSERT(func.type == LUSP_OBJECT_CLOSURE || func.type == LUSP_OBJECT_FUNCTION);
+            assert(func.type == LUSP_OBJECT_CLOSURE || func.type == LUSP_OBJECT_FUNCTION);
             
             if (func.type == LUSP_OBJECT_CLOSURE)
             {
@@ -75,7 +73,7 @@ struct lusp_object_t lusp_eval_vm(struct lusp_vm_bytecode_t* code, struct lusp_v
             
         case LUSP_VMOP_RETURN:
         {
-			DL_ASSERT(regs[-2].type == LUSP_OBJECT_CALL_FRAME);
+			assert(regs[-2].type == LUSP_OBJECT_CALL_FRAME);
 			
 			struct lusp_vm_call_frame_t* frame = (struct lusp_vm_call_frame_t*)regs[-2].call_frame;
 			struct lusp_object_t* result = regs + op.reg;
@@ -89,7 +87,7 @@ struct lusp_object_t lusp_eval_vm(struct lusp_vm_bytecode_t* code, struct lusp_v
 			pc = frame->pc;
 			
 			// store result
-			DL_ASSERT((pc - 1)->opcode == LUSP_VMOP_CALL);
+			assert((pc - 1)->opcode == LUSP_VMOP_CALL);
 			regs[(pc - 1)->reg] = *result;
         } break;
             
@@ -129,7 +127,7 @@ struct lusp_object_t lusp_eval_vm(struct lusp_vm_bytecode_t* code, struct lusp_v
 				    break;
 				    
 				default:
-				    DL_ASSERT(!"unexpected instruction");
+				    assert(!"unexpected instruction");
 				}
             }
         } break;
@@ -155,7 +153,7 @@ struct lusp_object_t lusp_eval_vm(struct lusp_vm_bytecode_t* code, struct lusp_v
 	#undef BINOP
             
 		default:
-		    DL_ASSERT(!"unexpected instruction");
+		    assert(!"unexpected instruction");
         }
     }
 }

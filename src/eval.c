@@ -1,8 +1,6 @@
-#include <core/common.h>
+#include "eval.h"
 
-#include <lusp/eval.h>
-
-#include <lusp/vm/bytecode.h>
+#include "bytecode.h"
 
 static lusp_vm_evaluator_t g_evaluator;
 

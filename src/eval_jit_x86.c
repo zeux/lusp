@@ -1,13 +1,11 @@
-#if DL_WINDOWS
+#ifdef DL_WINDOWS
 
-#include <core/common.h>
+#include "environment.h"
+#include "object.h"
 
-#include <lusp/environment.h>
-#include <lusp/object.h>
-
-#include <lusp/vm/bytecode.h>
-#include <lusp/vm/utils.h>
-#include <lusp/vm/codegen_x86.h>
+#include "bytecode.h"
+#include "utils.h"
+#include "codegen_x86.h"
 
 #include <windows.h>
 
@@ -322,7 +320,7 @@ static inline uint8_t* compile_create_closure(uint8_t* code, struct lusp_vm_op_t
 			break;
 
 		default:
-			DL_ASSERT(!"unexpected instruction");
+			assert(!"unexpected instruction");
 		}
 		
 		// store upval
@@ -477,7 +475,7 @@ static void compile(uint8_t* code, struct lusp_environment_t* env, struct lusp_v
 			break;
 
 		default:
-			DL_ASSERT(false);
+			assert(false);
 		}
 	}
 	

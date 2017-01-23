@@ -1,8 +1,4 @@
-#include <core/common.h>
-
-#include <lusp/compiler/lexer.h>
-
-#include <core/string.h>
+#include "lexer.h"
 
 #include <math.h>
 
@@ -90,7 +86,7 @@ static inline void parse_string(struct lusp_lexer_t* lexer)
 	char* buffer_end = buffer + sizeof(lexer->value.string) - 1;
 
 	// skip "
-	DL_ASSERT(peekchar(lexer) == '"');
+	assert(peekchar(lexer) == '"');
 
 	// scan for closing quote
 	char ch;
@@ -265,7 +261,7 @@ static inline enum lusp_lexeme_t parse_number(struct lusp_lexer_t* lexer, bool n
 static inline enum lusp_lexeme_t parse_sharp_literal(struct lusp_lexer_t* lexer)
 {
 	// skip #
-	DL_ASSERT(peekchar(lexer) == '#');
+	assert(peekchar(lexer) == '#');
 	
 	// parse literal
 	switch (to_lower(nextchar(lexer)))

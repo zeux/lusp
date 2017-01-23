@@ -1,6 +1,6 @@
 #pragma once
 
-#include <lusp/object.h>
+#include "object.h"
 
 struct mem_arena_t;
 struct lusp_lexer_t;

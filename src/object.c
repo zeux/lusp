@@ -1,13 +1,7 @@
-#include <core/common.h>
+#include "object.h"
 
-#include <lusp/object.h>
-
-#include <lusp/vm/bytecode.h>
-#include <lusp/memory.h>
-
-#include <core/string.h>
-#include <core/memory.h>
-#include <core/hash.h>
+#include "bytecode.h"
+#include "memory.h"
 
 static struct lusp_symbol_t* g_lusp_symbols[1024];
 
@@ -16,7 +10,7 @@ static inline const char* mkstring(const char* value)
 	size_t length = str_length(value);
 	
 	char* result = (char*)lusp_memory_allocate(length + 1);
-	DL_ASSERT(result);
+	assert(result);
 	
 	str_copy(result, length + 1, value);
 	
@@ -119,7 +113,7 @@ struct lusp_object_t lusp_mkclosure(struct lusp_vm_bytecode_t* code, unsigned in
     result.type = LUSP_OBJECT_CLOSURE;
     
 	result.closure = (struct lusp_vm_closure_t*)lusp_memory_allocate(sizeof(struct lusp_vm_closure_t) - sizeof(struct lusp_vm_upval_t*) + sizeof(struct lusp_vm_upval_t*) * upval_count);
-	DL_ASSERT(result.closure);
+	assert(result.closure);
 	
     result.closure->code = code;
     return result;

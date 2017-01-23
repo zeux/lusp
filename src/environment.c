@@ -1,16 +1,14 @@
-#include <core/common.h>
+#include "environment.h"
 
-#include <lusp/environment.h>
-
-#include <lusp/object.h>
-#include <lusp/memory.h>
+#include "object.h"
+#include "memory.h"
 
 static struct lusp_environment_slot_t* mkslot(struct lusp_environment_slot_t* next, struct lusp_object_t name)
 {
-	DL_ASSERT(name.type == LUSP_OBJECT_SYMBOL);
+	assert(name.type == LUSP_OBJECT_SYMBOL);
 	
     struct lusp_environment_slot_t* result = (struct lusp_environment_slot_t*)lusp_memory_allocate(sizeof(struct lusp_environment_slot_t));
-    DL_ASSERT(result);
+    assert(result);
     
     result->name = name.symbol;
     result->next = next;
@@ -21,7 +19,7 @@ static struct lusp_environment_slot_t* mkslot(struct lusp_environment_slot_t* ne
 
 struct lusp_environment_slot_t* find_slot(struct lusp_environment_t* env, struct lusp_object_t name)
 {
-	DL_ASSERT(name.type == LUSP_OBJECT_SYMBOL);
+	assert(name.type == LUSP_OBJECT_SYMBOL);
 	
     for (struct lusp_environment_slot_t* slot = env->head; slot; slot = slot->next)
         if (slot->name == name.symbol)
@@ -33,7 +31,7 @@ struct lusp_environment_slot_t* find_slot(struct lusp_environment_t* env, struct
 struct lusp_environment_t* lusp_environment_create()
 {
     struct lusp_environment_t* result = (struct lusp_environment_t*)lusp_memory_allocate(sizeof(struct lusp_environment_t));
-    DL_ASSERT(result);
+    assert(result);
     
     result->head = 0;
     

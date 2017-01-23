@@ -1,11 +1,7 @@
-#include <core/common.h>
+#include "compile.h"
 
-#include <lusp/compile.h>
-
-#include <lusp/compiler/lexer.h>
-#include <lusp/compiler/compiler.h>
-
-#include <mem/arena.h>
+#include "lexer.h"
+#include "compiler.h"
 
 #include <setjmp.h>
 #include <stdio.h>

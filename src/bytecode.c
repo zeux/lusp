@@ -1,12 +1,8 @@
-#include <core/common.h>
+#include "bytecode.h"
 
-#include <lusp/vm/bytecode.h>
-
-#include <lusp/write.h>
-#include <lusp/environment.h>
-#include <lusp/object.h>
-
-#include <core/string.h>
+#include "write.h"
+#include "environment.h"
+#include "object.h"
 
 #include <stdio.h>
 
